@@ -1,0 +1,56 @@
+<launch>
+  <param name="/use_sim_time" value="true" />
+
+  <!-- Teleop keyboard control -->
+  <node name="teleop_twist_keyboard" pkg="teleop_twist_keyboard"
+      type="teleop_twist_keyboard.py" output="screen" respawn="true">
+    <param name="repeat_rate" value="10.0"/>
+  </node>
+
+  <!-- ========== Point Cloud Preprocessing ========== -->
+
+  <!-- 1. Throttle: 20Hz -> 5Hz -->
+  <node name="pc_throttle" pkg="topic_tools" type="throttle"
+      args="messages /mid/points 5.0 /mid/points_throttled" />
+
+  <!-- 2. 3D PointCloud -> 2D LaserScan -->
+  <!--    z-crop in base_link frame: [-0.3, 0.3] around sensor height -->
+  <!--    On floor 2, floor 1 points (z ~ -2m in base_link) are filtered out -->
+  <node name="pc_to_scan" pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node">
+    <remap from="cloud_in" to="/mid/points_throttled" />
+    <remap from="scan" to="/mid/scan" />
+    <param name="target_frame" value="base_link" />
+    <param name="min_height" value="-0.3" />
+    <param name="max_height" value="0.3" />
+    <param name="range_min" value="0.2" />
+    <param name="range_max" value="15.0" />
+    <param name="angle_min" value="-3.14159265" />
+    <param name="angle_max" value="3.14159265" />
+    <param name="angle_increment" value="0.00873" />
+    <param name="scan_time" value="0.2" />
+    <param name="use_inf" value="true" />
+    <param name="concurrency_level" value="1" />
+  </node>
+
+  <!-- ========== Cartographer 2D SLAM ========== -->
+
+  <node name="cartographer_node" pkg="cartographer_ros"
+      type="cartographer_node" args="
+          -configuration_directory $(find final_slam)/config
+          -configuration_basename ME5413_final_2d.lua">
+    <remap from="/scan" to="/mid/scan" />
+    <remap from="/odom" to="/odometry/filtered" />
+    <remap from="/imu" to="/imu/data" />
+    <remap from="/fix" to="/navsat/fix" />
+  </node>
+
+  <node name="cartographer_occupancy_grid_node" pkg="cartographer_ros"
+      type="cartographer_occupancy_grid_node"
+      args="-resolution 0.05 -publish_period_sec 1.0 -pure_localization 0" />
+
+  <node name="pose2odom" pkg="final_slam" type="pose2odom.py" output="screen"/>
+
+  <!-- RViz -->
+  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find final_slam)/rviz/gmapping.rviz"
+    output="log" respawn="true" />
+</launch>

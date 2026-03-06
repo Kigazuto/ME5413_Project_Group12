@@ -1,0 +1,5 @@
+third_party/ros_motion_planning/core/trajectory_optimization
+/root/ME5413_Final_Project/devel/.private/trajectory_optimization/lib/libtrajectory_optimization.so /root/ME5413_Final_Project/devel/lib/libtrajectory_optimization.so
+/root/ME5413_Final_Project/devel/.private/trajectory_optimization/lib/pkgconfig/trajectory_optimization.pc /root/ME5413_Final_Project/devel/lib/pkgconfig/trajectory_optimization.pc
+/root/ME5413_Final_Project/devel/.private/trajectory_optimization/share/trajectory_optimization/cmake/trajectory_optimizationConfig-version.cmake /root/ME5413_Final_Project/devel/share/trajectory_optimization/cmake/trajectory_optimizationConfig-version.cmake
+/root/ME5413_Final_Project/devel/.private/trajectory_optimization/share/trajectory_optimization/cmake/trajectory_optimizationConfig.cmake /root/ME5413_Final_Project/devel/share/trajectory_optimization/cmake/trajectory_optimizationConfig.cmake

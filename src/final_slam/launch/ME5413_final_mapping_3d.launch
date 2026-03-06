@@ -1,0 +1,46 @@
+<!--
+  Copyright 2016 The Cartographer Authors
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<launch>
+  <param name="/use_sim_time" value="true" />
+
+  <!-- Load 'jackal' model (NO NEED, DON'T TRY) -->
+  <!-- <param name="robot_description"
+    command="$(find xacro)/xacro $(find jackal_description)/urdf/jackal.urdf.xacro" />
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher"
+    type="robot_state_publisher" /> -->
+
+  <!-- 点云降频：只保留每 3 帧中的 1 帧 -->
+  <node name="point_cloud_throttle" pkg="topic_tools" type="throttle"
+      args="messages /mid/points 5.0 /mid/points_throttled" />
+
+  <node name="cartographer_node" pkg="cartographer_ros"
+      type="cartographer_node" args="
+          -configuration_directory $(find final_slam)/config
+          -configuration_basename ME5413_final_3d.lua" >
+      <!-- output="screen"> -->
+    <remap from="/points2" to="/mid/points_throttled" />
+    <remap from="/odom" to="/odometry/filtered" />
+    <remap from="/imu" to="/imu/data" />
+    <remap from="/fix" to="/navsat/fix" />
+  </node>
+
+  <!-- 降低栅格发布频率，减轻 RViz 渲染压力 -->
+  <node name="cartographer_occupancy_grid_node" pkg="cartographer_ros"
+      type="cartographer_occupancy_grid_node" args="-resolution 0.05 -publish_period_sec 2.0 -pure_localization 0" />
+
+</launch>

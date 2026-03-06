@@ -1,0 +1,29 @@
+{
+    "time": "2026-03-06 11:55:31",
+    "method": "mpc",
+    "map_frame": "map",
+    "ref_path_topic": "/move_base/TrajectoryPlannerROS/global_plan",
+    "odom_topic": "/final_slam/odom",
+    "make_plan_topic": "/move_base/NavfnROS/make_plan",
+    "make_plan_local_topic": "/move_base_local/move_base_local/NavfnROS/make_plan",
+    "local_window_size": 3,
+    "freq": 50,
+    "xy_tol": 0.15,
+    "ang_tol": 0.17453292519943295,
+    "vel_ref": 1.0,
+    "max_vel": 1.0,
+    "max_lin_acc": 5,
+    "max_ang_acc": 8,
+    "max_omega": 1.5,
+    "N": 20,
+    "T": 0.05,
+    "Q": [
+        5.0,
+        5.0,
+        0.0
+    ],
+    "R": [
+        0.2,
+        0.2
+    ]
+}

@@ -1,0 +1,6 @@
+third_party/m-explore/map_merge
+/root/ME5413_Final_Project/devel/.private/multirobot_map_merge/lib/libcombine_grids.a /root/ME5413_Final_Project/devel/lib/libcombine_grids.a
+/root/ME5413_Final_Project/devel/.private/multirobot_map_merge/lib/multirobot_map_merge/map_merge /root/ME5413_Final_Project/devel/lib/multirobot_map_merge/map_merge
+/root/ME5413_Final_Project/devel/.private/multirobot_map_merge/lib/pkgconfig/multirobot_map_merge.pc /root/ME5413_Final_Project/devel/lib/pkgconfig/multirobot_map_merge.pc
+/root/ME5413_Final_Project/devel/.private/multirobot_map_merge/share/multirobot_map_merge/cmake/multirobot_map_mergeConfig.cmake /root/ME5413_Final_Project/devel/share/multirobot_map_merge/cmake/multirobot_map_mergeConfig.cmake
+/root/ME5413_Final_Project/devel/.private/multirobot_map_merge/share/multirobot_map_merge/cmake/multirobot_map_mergeConfig-version.cmake /root/ME5413_Final_Project/devel/share/multirobot_map_merge/cmake/multirobot_map_mergeConfig-version.cmake

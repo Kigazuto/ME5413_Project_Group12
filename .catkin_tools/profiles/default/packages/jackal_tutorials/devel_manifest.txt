@@ -1,0 +1,4 @@
+jackal/jackal_tutorials
+/root/ME5413_Final_Project/devel/.private/jackal_tutorials/lib/pkgconfig/jackal_tutorials.pc /root/ME5413_Final_Project/devel/lib/pkgconfig/jackal_tutorials.pc
+/root/ME5413_Final_Project/devel/.private/jackal_tutorials/share/jackal_tutorials/cmake/jackal_tutorialsConfig-version.cmake /root/ME5413_Final_Project/devel/share/jackal_tutorials/cmake/jackal_tutorialsConfig-version.cmake
+/root/ME5413_Final_Project/devel/.private/jackal_tutorials/share/jackal_tutorials/cmake/jackal_tutorialsConfig.cmake /root/ME5413_Final_Project/devel/share/jackal_tutorials/cmake/jackal_tutorialsConfig.cmake
