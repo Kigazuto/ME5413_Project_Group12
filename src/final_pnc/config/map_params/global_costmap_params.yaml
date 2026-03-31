@@ -18,6 +18,6 @@ global_costmap:
 
   inflater_layer:
     cost_scaling_factor: 5
-    inflation_radius: 3
+    inflation_radius: 1.2
   obstacles_layer:
     track_unknown_space: true

@@ -26,7 +26,7 @@
   </include>
 
   <!-- Disabled: creates TF loop with Gazebo's base_link->world transform -->
-  <!-- <node pkg="tf" type="static_transform_publisher" name="world2map" args="0 0 0 0 0 0 world map 10" /> -->
+  <!-- world frame is provided by goal_publisher_node (base_link->world) -->
 
   <node name="pose2odom" pkg="final_slam" type="pose2odom.py" output="screen" />
 

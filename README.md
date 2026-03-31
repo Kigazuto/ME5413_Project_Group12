@@ -1,218 +1,149 @@
 # ME5413_Final_Project
 
 NUS ME5413 Autonomous Mobile Robotics Final Project AY25/26
-> Authors: [Christina](https://github.com/ldaowen), [Ziggy](https://github.com/ziggyhuang), [Dongen](https://github.com/nuslde), and [Shuo](https://github.com/SS47816)
 
 ![Ubuntu 20.04](https://img.shields.io/badge/OS-Ubuntu_20.04-informational?style=flat&logo=ubuntu&logoColor=white&color=2bbc8a)
 ![ROS Noetic](https://img.shields.io/badge/Tools-ROS_Noetic-informational?style=flat&logo=ROS&logoColor=white&color=2bbc8a)
 ![C++](https://img.shields.io/badge/Code-C++-informational?style=flat&logo=c%2B%2B&logoColor=white&color=2bbc8a)
 ![Python](https://img.shields.io/badge/Code-Python-informational?style=flat&logo=Python&logoColor=white&color=2bbc8a)
-![GitHub Repo stars](https://img.shields.io/github/stars/NUS-Advanced-Robotics-Centre/ME5413_Final_Project?color=FFE333)
-![GitHub Repo forks](https://img.shields.io/github/forks/NUS-Advanced-Robotics-Centre/ME5413_Final_Project?color=FFE333)
-
-![cover_image](src/me5413_world/media/overview2526.png)
 
 ## Dependencies
 
-* System Requirements:
-  * Ubuntu 20.04 (18.04 not yet tested)
-  * ROS Noetic (Melodic not yet tested)
-  * C++11 and above
-  * CMake: 3.0.2 and above
-* This repo depends on the following standard ROS pkgs:
-  * `roscpp`
-  * `rospy`
-  * `rviz`
-  * `std_msgs`
-  * `nav_msgs`
-  * `geometry_msgs`
-  * `visualization_msgs`
-  * `tf2`
-  * `tf2_ros`
-  * `tf2_geometry_msgs`
-  * `pluginlib`
-  * `map_server`
-  * `gazebo_ros`
-  * `jsk_rviz_plugins`
-  * `jackal_gazebo`
-  * `jackal_navigation`
-  * `velodyne_simulator`
-  * `teleop_twist_keyboard`
-* And this [gazebo_model](https://github.com/osrf/gazebo_models) repositiory
+* Ubuntu 20.04 + ROS Noetic (native) **or** Ubuntu 22.04 via Docker
+* `python3-catkin-tools` (for `catkin build`)
+* `easyocr` (GPU, for box number recognition)
+* Gazebo models in `~/.gazebo/models/`
 
 ## Installation
 
-This repo is a ros workspace, containing three rospkgs:
-
-* `interactive_tools` are customized tools to interact with gazebo and your robot
-* `jackal_description` contains the modified jackal robot model descriptions
-* `me5413_world` the main pkg containing the gazebo world, and the launch files
-
-**Note:** If you are working on this project, it is encouraged to fork this repository and work on your own fork!
-
-After forking this repo to your own github:
+### Ubuntu 20.04 (Native)
 
 ```bash
-# Clone your own fork of this repo (assuming home here `~/`)
-cd
-git clone https://github.com/<YOUR_GITHUB_USERNAME>/ME5413_Final_Project.git
-cd ME5413_Final_Project
-
-# Install all dependencies
-rosdep install --from-paths src --ignore-src -r -y
-
-# Sometimes there might be missing dependencies such as sensor drivers for the simulation, if needed run the following to install (Thanks Zewen)
-sudo apt install -y ros-noetic-sick-tim ros-noetic-lms1xx ros-noetic-velodyne-description ros-noetic-pointgrey-camera-description ros-noetic-jackal-control
-
-# Build
-catkin_make
-# Source 
+cd ~/ME5413_Final_Project
+catkin init
+catkin config --extend /opt/ros/noetic
+catkin build
 source devel/setup.bash
 ```
 
-To properly load the gazebo world, you will need to have the necessary model files in the `~/.gazebo/models/` directory.
+### Ubuntu 22.04 (Docker)
 
-There are two sources of models needed:
+ROS Noetic is not available on Ubuntu 22.04, use Docker instead:
 
-* [Gazebo official models](https://github.com/osrf/gazebo_models)
-  
-  ```bash
-  # Create the destination directory
-  cd
-  mkdir -p .gazebo/models
+```bash
+# Enter Docker container (osrf/ros:noetic-desktop-full)
+~/ros1.sh        # new session
+~/ros1_in.sh     # attach existing session
 
-  # Clone the official gazebo models repo (assuming home here `~/`)
-  git clone https://github.com/osrf/gazebo_models.git
-
-  # Copy the models into the `~/.gazebo/models` directory
-  cp -r ~/gazebo_models/* ~/.gazebo/models
-  ```
-
-* [Our customized models](https://github.com/NUS-Advanced-Robotics-Centre/ME5413_Final_Project/tree/main/src/me5413_world/models)
-
-  ```bash
-  # Copy the customized models into the `~/.gazebo/models` directory
-  cp -r ~/ME5413_Final_Project/src/me5413_world/models/* ~/.gazebo/models
-  ```
+# Inside container
+cd /root/ME5413_Final_Project
+catkin init
+catkin config --extend /opt/ros/noetic
+catkin build
+source devel/setup.bash
+```
 
 ## Usage
 
-### 0. Gazebo World
-
-This command will launch the gazebo with the project world
+### 1. Launch Gazebo
 
 ```bash
-# Launch Gazebo World together with our robot
+source /root/ME5413_Final_Project/devel/setup.bash
 roslaunch me5413_world world.launch
 ```
 
-### 1. Manual Control
+### 2. Mapping (Cartographer 2D)
 
-If you wish to explore the gazebo world a bit, we provide you a way to manually control the robot around:
-
-```bash
-# Only launch the robot keyboard teleop control
-roslaunch me5413_world manual.launch
-```
-
-**Note:** This robot keyboard teleop control is also included in all other launch files, so you don't need to launch this when you do mapping or navigation.
-
-![rviz_manual_image](src/me5413_world/media/rviz_manual.png)
-
-### 2. Mapping (Naive Version)
-
-After launching **Step 0**, in the second terminal:
+In a new terminal:
 
 ```bash
-# Launch GMapping
-roslaunch me5413_world mapping.launch
+source /root/ME5413_Final_Project/devel/setup.bash
+roslaunch final_slam mapping_carto_2d.launch
 ```
 
-After finishing mapping, run the following command in the thrid terminal to save the map:
+Use keyboard `i/,/j/l/k` to teleoperate. After mapping, save:
 
 ```bash
-# Save the map as `my_map` in the `maps/` folder
-roscd me5413_world/maps/
-rosrun map_server map_saver -f my_map map:=/map
+source /root/ME5413_Final_Project/devel/setup.bash
+rosservice call /finish_trajectory 0
+rosservice call /write_state "{filename: '/root/ME5413_Final_Project/src/final_slam/maps/carto_map_2526.pbstream', include_unfinished_submaps: true}"
+cd /root/ME5413_Final_Project/src/final_slam/maps/
+rosrun map_server map_saver -f my_map_2526
 ```
 
-![rviz_nmapping_image](src/me5413_world/media/rviz_mapping.png)
-
-### 3. Navigation (Incomplete Version)
-
-Once completed **Step 2** mapping and saved your map, quit the mapping process.
-
-Then, in the second terminal:
+### 3. Manual Navigation (2D Nav Goal)
 
 ```bash
-# Load a map and launch AMCL localizer
-roslaunch me5413_world navigation.launch
+# Terminal 1: Gazebo
+roslaunch me5413_world world.launch
+
+# Terminal 2: Navigation + Localization
+roslaunch final_pnc slam_pnc.launch localization:=carto
 ```
 
-![rviz_navigation_image](src/me5413_world/media/rviz_navigation.png)
+Use **2D Nav Goal** in RViz to send navigation targets.
 
-## Student Tasks
+### 4. Full Autonomous Mission
 
-### 1. Map the environment
+Three terminals in Docker, **must start in order and restart all together**:
 
-* You may modify your Jackal robot to use other sensors, but please be realistic (i.e. no camera in the sky, subscribing to gazebo "ground truths")
-* Also in the context of ME5413, please keep to the Jackal base robot (i.e. no drones, humanoids, robot dog...)
-* You may use any SLAM algorithm you like, with any type of sensors:
-  * 2D LiDAR(s)
-  * 3D LiDAR(s)
-  * Vision Sensor(s)
-  * IMU(s)
-  * Fused Multi-sensors
-  * And any other combination...
-* You may operate the robot manually for mapping
-* You may want to remove all the moving/random objects in the environment by using the panel and/or commenting out some code in the launch file
-* We have provided you a GUI in RVIZ that allows you to click and generate/clear the random objects in the gazebo world:
-  ![rviz_panel_image](src/me5413_world/media/control_panel.png)
-* You may want to use tools like [EVO](https://github.com/MichaelGrupp/evo) to quantitatively evaluate the performance of your SLAM algorithm.
-* Verify your SLAM accuracy by comparing your odometry with the published `/gazebo/ground_truth/state` topic (`nav_msgs::Odometry`), which contains the ground truth odometry of the robot.
+```bash
+# Terminal 1: Gazebo
+source /root/ME5413_Final_Project/devel/setup.bash
+roslaunch me5413_world world.launch
 
-### 2. Using your own map, autonomously navigate your robot to complete the tasks
+# Terminal 2: Navigation + Localization
+source /root/ME5413_Final_Project/devel/setup.bash
+roslaunch final_pnc slam_pnc.launch localization:=carto
 
-  ![task_image](src/me5413_world/media/overview2526.png)
+# Terminal 3: FSM + Perception (auto start)
+source /root/ME5413_Final_Project/devel/setup.bash
+roslaunch final_fsm fsm.launch auto_start:=true
+```
 
-* Please ensure the objects have been successfully generated at the start of each run
-* On the lower floor, count the number of occurance of each type of numbered box (e.g. box 1, 2, 3, 4, the box numbers are randomly generated)
-* Unblock the exit from the lower level by publishing a `true` message (`std_msgs/Bool`) to the `/cmd_unblock` topic to remove the orange barrel
-  * Note that the exit can only be unblocked once and the unblocked time lasts for 10s
-* Exit the lower level
-* Go up the ramp to the upper level
-* Navigate past the first two corridors
-* At the wall with the two gaps, an orange traffic cone will be randomly placed in one of them closing the entrance, use the other door to navigate into the upper floor main room
-* Avoid the simulated person (represented by the moving red cylinder) 
-* Finally, stop the Jackal in the room containing the numbered box with the least number of occurance
-* Please do not use any of the ground truth topics such as `/gazebo/ground_truth/state` or `/box_odom`
+### Mission Flow
 
-### 3. Submission (12 April 2026, 2359 HRS)
+```
+LowerFloorExplore  -> Patrol 8 waypoints, OCR count box numbers
+UnblockExit        -> Navigate to exit, publish /cmd_unblock, rush through in 10s
+NavigateUpper      -> Go up ramp -> corridors (with timeout skip)
+DetectDoor         -> Check which door is blocked by cone
+DoorEntry          -> Enter through unblocked door
+FindTargetBox      -> Find and stop at the least occurring box
+Idle               -> Mission complete
+```
 
-Please submit the following for the project:
-  * Code to be submitted via your own Github repo link (Please make the repo public during submission)
-  * Demo Video of your robot completing the tasks autonomously in a single run
-  * Generated map files
-  * Presentation (10 minutes), live demo of your robot (5 minutes), Q&A (3 minutes)
-    * Please note that we will use the submitted presentation slides during the in-person presentation on 17 April
-  * Report of max 10 pages (Please be concise)
-  * In your report and presentation, please cover the following:
-    * Perception, mapping & localization, navigation solutions
-    * Challenge(s) faced and how you overcame them
-  * Interesting ways to solve the challenges and well documented Github commits will be much appreciated by the TAs
-  * Also there is a hidden "5413" in the simulation, kudos to those who managed to map it in as well!
+### Monitor Progress
 
-## Contribution
+```bash
+rostopic echo /percep/box_counts           # box counting results
+rostopic echo /me5413_world/respawn_status  # object spawn status
+rostopic echo /me5413_world/objects_ready   # objects ready signal
+```
 
-If you managed to find any bugs, you are welcome to contribute to this repo by opening a pull-request
+## Architecture
 
-If you require any clarifications on the task or to operate the simulation, please raise them on Canvas
+| Package | Description |
+|---------|-------------|
+| `me5413_world` | Gazebo world, object spawner plugin, goal publisher |
+| `final_slam` | Cartographer SLAM, localization, map files |
+| `final_pnc` | Navigation stack (move_base + MPC controller) |
+| `final_fsm` | State machine, explore controller |
+| `final_percep` | Visual perception (EasyOCR number detection, red obstacle detection) |
 
-We are following (as much as possible):
+## Key Configuration Files
 
-* [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html),
-* [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#main),
-* [ROS C++ Style Guide](http://wiki.ros.org/CppStyleGuide)
+| File | Description |
+|------|-------------|
+| `final_slam/maps/my_map_2526.pgm` | Map image |
+| `final_slam/maps/carto_map_2526.pbstream` | Cartographer localization map |
+| `final_slam/config/ME5413_final_2d.lua` | Cartographer config (use_nav_sat=false) |
+| `final_pnc/config/nav_params/mpc.yaml` | MPC controller params |
+| `final_pnc/config/nav_params/global_planner.yaml` | Global planner (allow_unknown: true) |
+| `me5413_world/config/config.yaml` | All waypoint coordinates (world frame) |
+| `final_fsm/src/states.py` | State machine definitions |
+| `final_fsm/src/state_machine_node.py` | State machine main node |
+| `final_percep/src/visual.py` | Perception node (OCR + red detection) |
 
 ## License
 

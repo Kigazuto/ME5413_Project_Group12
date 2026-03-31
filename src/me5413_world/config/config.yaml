@@ -49,3 +49,97 @@ me5413_world:
     x: 2.9
     y: -13.1
     yaw: 0.0
+
+  # ===== Task 2: Full Autonomous Navigation Waypoints =====
+
+  # Lower floor exploration waypoints (for counting boxes)
+  lower_explore_1:
+    x: -5.0
+    y: 0.0
+    yaw: 3.14
+  lower_explore_2:
+    x: -10.0
+    y: 5.0
+    yaw: 3.14
+  lower_explore_3:
+    x: -16.0
+    y: 5.0
+    yaw: 3.14
+  lower_explore_4:
+    x: -16.0
+    y: -5.0
+    yaw: 0.0
+  lower_explore_5:
+    x: -10.0
+    y: -5.0
+    yaw: 0.0
+  lower_explore_6:
+    x: -5.0
+    y: -5.0
+    yaw: 0.0
+  lower_explore_7:
+    x: -5.0
+    y: 5.0
+    yaw: 3.14
+  lower_explore_8:
+    x: -16.0
+    y: 0.0
+    yaw: 3.14
+
+  # Navigate to exit area (before unblock)
+  pre_exit:
+    x: -15.0
+    y: -9.0
+    yaw: -1.57
+
+  # Exit from lower floor (after unblock, go through the barrel gap)
+  exit_point:
+    x: -15.0
+    y: -11.0
+    yaw: -1.57
+
+  # Ramp bottom
+  ramp_bottom:
+    x: -11.0
+    y: -12.0
+    yaw: 0.0
+
+  # Ramp top (upper floor entry)
+  ramp_top:
+    x: 8.0
+    y: -12.0
+    yaw: 0.0
+
+  # Upper floor corridor waypoints
+  corridor_1:
+    x: 8.0
+    y: -10.0
+    yaw: 1.57
+
+  corridor_2:
+    x: 5.0
+    y: -6.0
+    yaw: 1.57
+
+  # Before the two doors - detection point for cone
+  task1_crossing_1:
+    x: 5.0
+    y: -1.0
+    yaw: 1.57
+
+  # Door entry options (one will be blocked by cone)
+  # Cone is at (12, +5) or (12, -5) in world frame
+  task2_entry_1:
+    x: 5.0
+    y: 3.0
+    yaw: 1.57
+  task2_entry_2:
+    x: 5.0
+    y: -3.0
+    yaw: -1.57
+
+  # Inside upper floor main room
+  upper_room_center:
+    x: 10.0
+    y: 0.0
+    yaw: 0.0

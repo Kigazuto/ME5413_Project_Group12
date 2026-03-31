@@ -17,7 +17,7 @@
 
 
   <!-- Launch Perception -->
-  <!-- <include file="$(find final_percep)/launch/final_percep.launch" /> -->
+  <include file="$(find final_percep)/launch/final_percep.launch" />
 
   <!-- Launch the mapper -->
   <include file="$(find occ_grid_mapping)/launch/mapping.launch" />
@@ -27,7 +27,13 @@
   <include file="$(find final_fsm)/launch/explore.launch" />
 
   <!-- Launch the state machine -->
-  <node ns="final_fsm" pkg="final_fsm" type="state_machine_node.py" name="state_machine_node" output="screen" respawn="true"/>
+  <!-- Set auto_start:=true to begin full autonomous navigation automatically -->
+  <arg name="auto_start" default="false" />
+  <arg name="auto_start_delay" default="5.0" />
+  <node ns="final_fsm" pkg="final_fsm" type="state_machine_node.py" name="state_machine_node" output="screen" respawn="true">
+    <param name="auto_start" value="$(arg auto_start)" />
+    <param name="auto_start_delay" value="$(arg auto_start_delay)" />
+  </node>
     
 
 

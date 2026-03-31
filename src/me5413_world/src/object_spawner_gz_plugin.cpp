@@ -3,10 +3,12 @@
  * Copyright (C) 2024 nuslde, SS47816
 
  * Gazebo Plugin for spawning objects
- 
+
 **/
 
 #include "me5413_world/object_spawner_gz_plugin.hpp"
+
+#include <thread>
 
 namespace gazebo
 {
@@ -27,12 +29,13 @@ const double DEST_Z_COORD = 2.6;
 ObjectSpawner::ObjectSpawner() : WorldPlugin() {};
 
 ObjectSpawner::~ObjectSpawner() {};
-  
+
 void ObjectSpawner::Load(physics::WorldPtr _world, sdf::ElementPtr _sdf)
 {
   transport::NodePtr node(new transport::Node());
   node->Init(_world->Name());
   clt_delete_objects_ = nh_.serviceClient<gazebo_msgs::DeleteModel>("/gazebo/delete_model");
+  clt_get_world_properties_ = nh_.serviceClient<gazebo_msgs::GetWorldProperties>("/gazebo/get_world_properties");
   this->timer_ = nh_.createTimer(ros::Duration(0.1), &ObjectSpawner::timerCallback, this);
   this->pub_factory_ = node->Advertise<msgs::Factory>("~/factory");
   this->sub_respawn_objects_ = nh_.subscribe("/rviz_panel/respawn_objects", 1, &ObjectSpawner::respawnCmdCallback, this);
@@ -40,20 +43,83 @@ void ObjectSpawner::Load(physics::WorldPtr _world, sdf::ElementPtr _sdf)
   this->pub_box_cmd_vel_ = nh_.advertise<geometry_msgs::Twist>("/box_cmd_vel", 10);
   this->sub_box_odom_ = nh_.subscribe("/box_odom", 10, &ObjectSpawner::boxOdomCallback, this);
   this->pub_rviz_markers_ = nh_.advertise<visualization_msgs::MarkerArray>("/gazebo/ground_truth/box_markers", 0);
+  this->pub_objects_ready_ = nh_.advertise<std_msgs::Bool>("/me5413_world/objects_ready", 1, true);
+  this->pub_respawn_status_ = nh_.advertise<std_msgs::String>("/me5413_world/respawn_status", 1, true);
   bridge_open_called_ = false;
+  pending_respawn_cmd_ = -1;
+  respawn_in_progress_ = false;
+
+  std_msgs::Bool ready_msg;
+  ready_msg.data = false;
+  pub_objects_ready_.publish(ready_msg);
+  publishStatus("IDLE");
   return;
 };
+
+// ---------------------------------------------------------------------------
+// Status helper
+// ---------------------------------------------------------------------------
+
+void ObjectSpawner::publishStatus(const std::string& status)
+{
+  std_msgs::String msg;
+  msg.data = status;
+  pub_respawn_status_.publish(msg);
+  ROS_INFO_STREAM("[respawn_status] " << status);
+}
+
+// ---------------------------------------------------------------------------
+// Timer — picks up pending commands after worker finishes
+// ---------------------------------------------------------------------------
 
 void ObjectSpawner::timerCallback(const ros::TimerEvent&)
 {
-  // publish rviz markers
-  this->pub_rviz_markers_.publish(this->box_markers_msg_);
+  pub_rviz_markers_.publish(box_markers_msg_);
 
-  return;
+  int cmd = pending_respawn_cmd_.load();
+  if (cmd >= 0 && !respawn_in_progress_.load())
+  {
+    pending_respawn_cmd_ = -1;
+    respawn_in_progress_ = true;
+    std::thread(&ObjectSpawner::executeRespawn, this, cmd).detach();
+  }
 };
 
+// ---------------------------------------------------------------------------
+// Model existence helpers
+// ---------------------------------------------------------------------------
 
-void ObjectSpawner::spawnRandomBridge() //deprecate for 2526
+bool ObjectSpawner::modelExists(const std::string& name)
+{
+  if (name.empty())
+    return false;
+
+  gazebo_msgs::GetWorldProperties srv;
+  if (!clt_get_world_properties_.call(srv))
+    return false;
+  const auto& model_names = srv.response.model_names;
+  return std::find(model_names.begin(), model_names.end(), name) != model_names.end();
+}
+
+bool ObjectSpawner::waitModelState(const std::string& name, bool should_exist, double timeout_sec)
+{
+  ros::WallTime deadline = ros::WallTime::now() + ros::WallDuration(timeout_sec);
+  while (ros::WallTime::now() < deadline)
+  {
+    if (modelExists(name) == should_exist)
+      return true;
+    common::Time::MSleep(200);
+  }
+  ROS_WARN_STREAM("waitModelState: timeout (" << timeout_sec << "s) for '"
+    << name << "' to " << (should_exist ? "appear" : "disappear"));
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Spawn helpers
+// ---------------------------------------------------------------------------
+
+void ObjectSpawner::spawnRandomBridge() //deprecated for 2526
 {
   msgs::Factory bridge_msg;
   this->bridge_name = "bridge";
@@ -62,38 +128,36 @@ void ObjectSpawner::spawnRandomBridge() //deprecate for 2526
   std::srand(std::time(0));
   bridge_position_ = (static_cast<double>(std::rand()) / RAND_MAX * 0.5 + 0.25) * (MAX_X_COORD - MIN_X_COORD) + MIN_X_COORD;
   msgs::Set(bridge_msg.mutable_pose(), ignition::math::Pose3d(
-    ignition::math::Vector3d(bridge_position_, 9.0, 2.6), 
+    ignition::math::Vector3d(bridge_position_, 9.0, 2.6),
     ignition::math::Quaterniond(0, 0, -1.5708)));
   this->pub_factory_->Publish(bridge_msg);
   return;
 };
 
-void ObjectSpawner::spawnRandomBoxes()
+bool ObjectSpawner::spawnRandomBoxes()
 {
   std::srand(std::time(0));
   this->box_names.clear();
   this->box_points.clear();
   this->box_markers_msg_.markers.clear();
-  
-  // The following two vectors should have the same size:
-  std::vector<int> box_labels = {1, 2, 3, 4, 5, 6, 7, 8, 9}; // all possible box labels, between 1 and 9
-  std::vector<int> box_nums = {1, 2, 3, 4, 5}; // can contain any positive number, but maek sure there's only one solution
+
+  std::vector<int> box_labels = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+  std::vector<int> box_nums = {1, 2, 3, 4, 5};
   if (box_labels.size() < 1 || box_nums.size() < 1)
   {
-    ROS_ERROR("The box_labels and box_nums should not be empty! Stoppping the spawning process");
-    return;
+    ROS_ERROR("The box_labels and box_nums should not be empty!");
+    return false;
   }
 
-  // Randomise the number of boxes
   std::random_device rd;
   std::mt19937 g(rd());
   std::shuffle(box_nums.begin(), box_nums.end(), g);
   std::shuffle(box_labels.begin(), box_labels.end(), g);
   box_nums = std::vector<int>(box_nums.begin(), box_nums.begin() + NUM_BOX_TYPES);
   box_labels = std::vector<int>(box_labels.begin(), box_labels.begin() + NUM_BOX_TYPES);
-  
+
   std::vector<std::vector<int>> boxes;
-  for (int i = 0; i < box_nums.size(); i++)
+  for (size_t i = 0; i < box_nums.size(); i++)
   {
     for (int j = 0; j < box_nums[i]; j++)
     {
@@ -101,11 +165,11 @@ void ObjectSpawner::spawnRandomBoxes()
     }
   }
 
-  // Generate destination box points
+  // Spawn destination boxes (upper floor)
   const double spacing = (DEST_MAX_Y_COORD - DEST_MIN_Y_COORD)/(box_labels.size());
-  for (int i = 0; i < box_labels.size(); i++)
+  for (size_t i = 0; i < box_labels.size(); i++)
   {
-    const ignition::math::Vector3d point = ignition::math::Vector3d(DEST_MAX_X_COORD , spacing*(i+0.5) + DEST_MIN_Y_COORD, DEST_Z_COORD + + BOX_SIZE/2);
+    const ignition::math::Vector3d point = ignition::math::Vector3d(DEST_MAX_X_COORD, spacing*(i+0.5) + DEST_MIN_Y_COORD, DEST_Z_COORD + BOX_SIZE/2);
     msgs::Factory box_msg;
     const std::string box_name = "number" + std::to_string(box_labels[i]);
     this->box_names.push_back(box_name);
@@ -116,20 +180,18 @@ void ObjectSpawner::spawnRandomBoxes()
     common::Time::MSleep(500);
   }
 
-  // Generate random box points
-  // visualization_msgs::MarkerArray text_markers_msg;
-  for (int i = 0; i < boxes.size(); i++)
+  // Spawn random boxes (lower floor)
+  for (size_t i = 0; i < boxes.size(); i++)
   {
     ignition::math::Vector3d point;
     bool has_collision = true;
-    // Check for collsions
     while (has_collision)
     {
       has_collision = false;
       point = ignition::math::Vector3d(static_cast<double>(std::rand()) / RAND_MAX * (MAX_X_COORD - MIN_X_COORD) + MIN_X_COORD,
                                        static_cast<double>(std::rand()) / RAND_MAX * (MAX_Y_COORD - MIN_Y_COORD) + MIN_Y_COORD,
                                        Z_COORD + BOX_SIZE/2);
-      
+
       if (std::abs(point.X() - (-10.0)) <= 2.0)
       {
         has_collision = true;
@@ -145,12 +207,10 @@ void ObjectSpawner::spawnRandomBoxes()
           break;
         }
       }
-    } 
+    }
 
-    // Add this box to the list
     this->box_points.push_back(point);
-    
-    // Publish gazebo model for this box
+
     msgs::Factory box_msg;
     const std::string box_name = "number" + std::to_string(boxes[i][0]);
     box_msg.set_sdf_filename("model://" + box_name);
@@ -159,66 +219,54 @@ void ObjectSpawner::spawnRandomBoxes()
     this->pub_factory_->Publish(box_msg);
     ROS_DEBUG_STREAM("Generated " << box_name << " at " << point);
     common::Time::MSleep(500);
-    // // Publish rviz marker for this box
-    // visualization_msgs::Marker box_marker;
-    // box_marker.header.frame_id = "world";
-    // box_marker.header.stamp = ros::Time();
-    // box_marker.ns = "gazebo";
-    // box_marker.id = 2*i;
-    // box_marker.type = visualization_msgs::Marker::CUBE;
-    // box_marker.action = visualization_msgs::Marker::ADD;
-    // box_marker.frame_locked = true;
-    // box_marker.lifetime = ros::Duration(0.2);
-    // box_marker.pose.position.x = point.X();
-    // box_marker.pose.position.y = point.Y();
-    // box_marker.pose.position.z = point.Z();
-    // box_marker.pose.orientation.x = 0.0;
-    // box_marker.pose.orientation.y = 0.0;
-    // box_marker.pose.orientation.z = 0.0;
-    // box_marker.pose.orientation.w = 1.0;
-    // box_marker.scale.x = 0.8;
-    // box_marker.scale.y = 0.8;
-    // box_marker.scale.z = 0.8;
-    // box_marker.color.a = 0.7;
-    // box_marker.color.r = static_cast<double>(std::rand()) / RAND_MAX * 0.5 + 0.25;
-    // box_marker.color.g = static_cast<double>(std::rand()) / RAND_MAX * 0.5 + 0.25;
-    // box_marker.color.b = static_cast<double>(std::rand()) / RAND_MAX * 0.5 + 0.25;
-    // this->box_markers_msg_.markers.emplace_baccommon::Time::MSleep(200);k(box_marker);
-
-    // visualization_msgs::Marker text_marker = box_marker;
-    // text_marker.id = 2*i + 1;
-    // text_marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
-    // text_marker.text = std::to_string(boxes[i][0]);
-    // text_marker.pose.position.z += 0.5;
-    // text_marker.scale.z = 0.5;
-    // text_marker.color.a = 0.8;
-    // text_marker.color.r = 0.0;
-    // text_marker.color.g = 0.0;
-    // text_marker.color.b = 0.0;
-    // text_markers_msg.markers.emplace_back(text_marker);
   }
 
-  // // merge the two marker arrays
-  // this->box_markers_msg_.markers.insert(this->box_markers_msg_.markers.end(), text_markers_msg.markers.begin(), text_markers_msg.markers.end());
-  ROS_INFO_STREAM("Random Boxes Spawned!");
-  return;
+  // Verify: check first and last box exist in Gazebo
+  if (box_names.empty())
+  {
+    ROS_ERROR("spawnRandomBoxes: no boxes were generated");
+    return false;
+  }
+  if (!waitModelState(box_names.front(), true, 5.0))
+  {
+    ROS_ERROR_STREAM("spawnRandomBoxes: first box '" << box_names.front() << "' not found in Gazebo");
+    return false;
+  }
+  if (box_names.size() > 1 && !waitModelState(box_names.back(), true, 5.0))
+  {
+    ROS_ERROR_STREAM("spawnRandomBoxes: last box '" << box_names.back() << "' not found in Gazebo");
+    return false;
+  }
+
+  ROS_INFO_STREAM("Boxes spawned and verified (" << box_names.size() << " models)");
+  return true;
 };
 
-void ObjectSpawner::deleteObject(const std::string& object_name)
-{
-  gazebo_msgs::DeleteModel delete_model_srv;
-  delete_model_srv.request.model_name = object_name;
-  this->clt_delete_objects_.call(delete_model_srv);
-  if (delete_model_srv.response.success == true)
-  {
-    ROS_INFO_STREAM("Object: " << object_name << " successfully deleted");
-  }
-  else
-  {
-    ROS_ERROR_STREAM("Failed to delete Object: " << object_name << std::endl);
-  }
+// ---------------------------------------------------------------------------
+// Delete helpers
+// ---------------------------------------------------------------------------
 
-  return;
+bool ObjectSpawner::deleteObject(const std::string& object_name)
+{
+  if (object_name.empty())
+  {
+    ROS_WARN("deleteObject: name is empty, skipping");
+    return false;
+  }
+  gazebo_msgs::DeleteModel srv;
+  srv.request.model_name = object_name;
+  if (!this->clt_delete_objects_.call(srv))
+  {
+    ROS_WARN_STREAM("deleteObject: service call failed for '" << object_name << "'");
+    return false;
+  }
+  if (srv.response.success)
+  {
+    ROS_INFO_STREAM("Deleted: " << object_name);
+    return true;
+  }
+  ROS_WARN_STREAM("deleteObject: '" << object_name << "' — " << srv.response.status_message);
+  return false;
 };
 
 void ObjectSpawner::deleteBridge()  //deprecated for 2526
@@ -226,11 +274,10 @@ void ObjectSpawner::deleteBridge()  //deprecated for 2526
   deleteObject(this->bridge_name);
   this->bridge_name = "";
   this->bridge_point = ignition::math::Vector3d();
-
   return;
 };
 
-void ObjectSpawner::spawnCone()
+bool ObjectSpawner::spawnCone()
 {
   msgs::Factory cone_msg;
   cone_msg.set_sdf_filename("model://construction_barrel");
@@ -240,24 +287,28 @@ void ObjectSpawner::spawnCone()
     ignition::math::Vector3d(-15, -10, 0.01),
     ignition::math::Quaterniond(0, 0, 0)));
   this->pub_factory_->Publish(cone_msg);
-  ROS_INFO_STREAM("Cone Spawned!");
-  return;
+
+  if (waitModelState(cone_name, true, 5.0))
+  {
+    ROS_INFO("Cone (barrel) spawned and verified");
+    return true;
+  }
+  ROS_ERROR("Cone (barrel) spawn FAILED — not found after timeout");
+  return false;
 };
 
 void ObjectSpawner::deleteCone()
 {
-  deleteObject(this->cone_name);
+  if (deleteObject(this->cone_name))
+    ROS_INFO("Cone (barrel) cleared");
   this->cone_name = "";
-  ROS_INFO_STREAM("Cone Deleted!");
-  return;
 };
 
-void ObjectSpawner::spawnRandomCone()
+bool ObjectSpawner::spawnRandomCone()
 {
   msgs::Factory random_cone_msg;
   random_cone_msg.set_sdf_filename("model://construction_cone");
   this->random_cone_name = "Construction Cone";
-
 
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -269,7 +320,7 @@ void ObjectSpawner::spawnRandomCone()
   {
     random_cone_y = 5.0;
   }
-  else 
+  else
   {
     random_cone_y = -5.0;
   }
@@ -278,16 +329,21 @@ void ObjectSpawner::spawnRandomCone()
     ignition::math::Vector3d(12, random_cone_y, DEST_Z_COORD),
     ignition::math::Quaterniond(0, 0, 0)));
   this->pub_factory_->Publish(random_cone_msg);
-  ROS_INFO_STREAM("Random Cone Spawned!");
-  return;
+
+  if (waitModelState(random_cone_name, true, 5.0))
+  {
+    ROS_INFO("Random cone (door blocker) spawned and verified");
+    return true;
+  }
+  ROS_ERROR("Random cone spawn FAILED — not found after timeout");
+  return false;
 };
 
 void ObjectSpawner::deleteRandomCone()
 {
-  deleteObject(this->random_cone_name);
+  if (deleteObject(this->random_cone_name))
+    ROS_INFO("Random cone cleared");
   this->random_cone_name = "";
-  ROS_INFO_STREAM("Random Cone Deleted!");
-  return;
 };
 
 
@@ -296,80 +352,131 @@ void ObjectSpawner::deleteBoxes()
   this->box_markers_msg_.markers.clear();
   this->pub_rviz_markers_.publish(this->box_markers_msg_);
 
+  int deleted = 0;
   for (const auto& box_name: this->box_names)
   {
-    deleteObject(box_name);
+    if (deleteObject(box_name))
+      deleted++;
   }
+  ROS_INFO_STREAM("Boxes deleted: " << deleted << "/" << this->box_names.size());
   this->box_names.clear();
   this->box_points.clear();
-  ROS_INFO_STREAM("Random Boxes Deleted!");
   return;
 };
 
-void ObjectSpawner::respawnCmdCallback(const std_msgs::Int16::ConstPtr& respawn_msg)
+// ---------------------------------------------------------------------------
+// Respawn orchestration (runs in worker thread)
+// ---------------------------------------------------------------------------
+
+void ObjectSpawner::executeRespawn(int cmd)
 {
-  const int cmd = respawn_msg->data;
+  std_msgs::Bool ready_msg;
+  ready_msg.data = false;
+  pub_objects_ready_.publish(ready_msg);
+
   if (cmd == 0)
   {
-    // deleteBridge();
+    publishStatus("RESPAWN_START_CMD_0");
     deleteCone();
-    common::Time::MSleep(500);
     deleteRandomCone();
-    common::Time::MSleep(500);
     deleteBoxes();
-    ROS_INFO_STREAM("Random Objects Cleared!");
+    publishStatus("IDLE");
+    // cmd==0 is clear-only: objects are NOT ready
+    respawn_in_progress_ = false;
+    return;
   }
-  else if (cmd == 1)
+
+  if (cmd == 1)
   {
+    publishStatus("RESPAWN_START_CMD_1");
+
+    // Phase 1: clear
     deleteCone();
-    common::Time::MSleep(500);
+    common::Time::MSleep(300);
     deleteRandomCone();
-    common::Time::MSleep(500);
+    common::Time::MSleep(300);
     deleteBoxes();
-    //deleteBridge();
-    //spawnRandomBridge();
-    spawnRandomCone();
-    common::Time::MSleep(500);
-    spawnCone();
-    common::Time::MSleep(500);
-    spawnRandomBoxes();
-    ROS_INFO_STREAM("Random Objects Respawned!");
+    common::Time::MSleep(300);
+
+    // Phase 2: spawn + verify
+    bool cone_ok = spawnCone();
+    common::Time::MSleep(300);
+    bool rcone_ok = spawnRandomCone();
+    common::Time::MSleep(300);
+    bool boxes_ok = spawnRandomBoxes();
     bridge_open_called_ = false;
+
+    // Phase 3: result
+    if (cone_ok && rcone_ok && boxes_ok)
+    {
+      ready_msg.data = true;
+      pub_objects_ready_.publish(ready_msg);
+      publishStatus("RESPAWN_OK");
+    }
+    else
+    {
+      std::string reason;
+      if (!cone_ok) reason += "cone ";
+      if (!rcone_ok) reason += "random_cone ";
+      if (!boxes_ok) reason += "boxes ";
+      pub_objects_ready_.publish(ready_msg);  // stays false
+      publishStatus("RESPAWN_FAIL_" + reason);
+    }
+    respawn_in_progress_ = false;
+    return;
+  }
+
+  ROS_WARN_STREAM("Respawn command not recognized: " << cmd);
+  publishStatus("IDLE");
+  respawn_in_progress_ = false;
+}
+
+// ---------------------------------------------------------------------------
+// ROS callbacks
+// ---------------------------------------------------------------------------
+
+void ObjectSpawner::respawnCmdCallback(const std_msgs::Int16::ConstPtr& respawn_msg)
+{
+  const int new_cmd = respawn_msg->data;
+  const int old_pending = pending_respawn_cmd_.exchange(new_cmd);
+
+  if (respawn_in_progress_.load())
+  {
+    ROS_WARN_STREAM("Respawn in progress — queued cmd=" << new_cmd
+      << " (overwrote pending=" << old_pending << ")");
   }
   else
   {
-    ROS_INFO_STREAM("Respawn Command Not Recognized!");
+    ROS_INFO_STREAM("Respawn command accepted: " << new_cmd);
   }
-
-  return;
 };
 
 void ObjectSpawner::openBridgeCallback(const std_msgs::Bool::ConstPtr& open_bridge_msg)
 {
-  const bool open_bridge = open_bridge_msg->data;
-  if (open_bridge == true)
+  if (!open_bridge_msg->data)
   {
-    if (bridge_open_called_ == false)
-    {
-      bridge_open_called_ = true;
-      deleteCone();
-      ROS_INFO_STREAM("Cone will be opened for 10s");
-      common::Time::Sleep(10);
-      spawnCone();
-      ROS_INFO_STREAM("Cone is now placed back, cannot be removed again");
-    }
-    else
-    {
-      ROS_INFO_STREAM("Cone has been removed before, cannot be removed again");
-    }
+    ROS_INFO("cmd_unblock: data=false, ignoring");
+    return;
   }
-  else
+  if (bridge_open_called_)
   {
-    ROS_INFO_STREAM("Cone removal command is false, do nothing...");
+    ROS_INFO("Exit already opened once, cannot open again");
+    return;
   }
+  bridge_open_called_ = true;
+  deleteCone();
+  ROS_INFO("Exit opened — barrel removed for 10s");
+  bridge_reclose_timer_ = nh_.createTimer(ros::Duration(10.0),
+    &ObjectSpawner::bridgeRecloseCallback, this, true);
 }
 
-void ObjectSpawner::boxOdomCallback(const nav_msgs::Odometry::ConstPtr& msg) 
+void ObjectSpawner::bridgeRecloseCallback(const ros::TimerEvent&)
+{
+  spawnCone();
+  ROS_INFO("Exit re-closed — barrel respawned, cannot be removed again");
+}
+
+void ObjectSpawner::boxOdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
   double current_y = msg->pose.pose.position.y;
   static bool moving_positive = true;

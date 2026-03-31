@@ -10,4 +10,4 @@ local_costmap:
   rolling_window: true
   inflater_layer:
     cost_scaling_factor: 2
-    inflation_radius: 1.5
+    inflation_radius: 0.8

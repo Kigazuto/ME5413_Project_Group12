@@ -11,7 +11,7 @@
 #     * hybrid_a_star
 
 NavfnROS:
-  allow_unknown: false
+  allow_unknown: true
 
 GraphPlanner:
   # offset of transform from world(x,y) to grid map(x,y)

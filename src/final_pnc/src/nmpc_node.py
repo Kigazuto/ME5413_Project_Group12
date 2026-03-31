@@ -361,6 +361,9 @@ class NMPCNode:
 
     def local_replan(self):
         idx_odom_in_path = find_nearest_point(self.global_path, self.curr_pose)
+        if idx_odom_in_path is None:
+            rospy.logwarn_throttle(1, "can't find nearest point on global path")
+            return False
         if 0:
             if idx_odom_in_path is None:
                 rospy.logwarn_throttle(1, "can't find nearest point")
@@ -384,8 +387,13 @@ class NMPCNode:
                     curr_pose_stam, self.goal_pose, 0
                 ).plan  # if fail, replan to goal
                 if local_path is None or len(local_path.poses) == 0:
-                    rospy.logwarn_throttle(1, "local re-plan failed")
-                    return False
+                    # Fallback: keep tracking remaining global path to avoid deadlock at ramps/corridors.
+                    rospy.logwarn_throttle(1, "local re-plan failed, fallback to remaining global path")
+                    local_path = Path()
+                    local_path.header = self.global_path.header
+                    local_path.poses = self.global_path.poses[idx_odom_in_path:]
+                    if len(local_path.poses) == 0:
+                        return False
             self.local_path_pub.publish(local_path)
             self.ref_path = local_path
         self.interpo_ref_path = path_lin_interpo_cut(self.ref_path, self.T, self.N + 1, self.vel_ref)
