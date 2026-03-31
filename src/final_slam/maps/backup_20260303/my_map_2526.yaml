@@ -1,7 +1,0 @@
-image: my_map_2526.pgm
-resolution: 0.050000
-origin: [-2.850000, -13.917206, 0.000000]
-negate: 0
-occupied_thresh: 0.65
-free_thresh: 0.196
-

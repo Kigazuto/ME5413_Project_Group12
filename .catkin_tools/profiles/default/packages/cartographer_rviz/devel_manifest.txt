@@ -1,5 +1,0 @@
-third_party/cartographer/cartographer_ros/cartographer_rviz
-/root/ME5413_Final_Project/devel/.private/cartographer_rviz/lib/libcartographer_rviz.so /root/ME5413_Final_Project/devel/lib/libcartographer_rviz.so
-/root/ME5413_Final_Project/devel/.private/cartographer_rviz/lib/pkgconfig/cartographer_rviz.pc /root/ME5413_Final_Project/devel/lib/pkgconfig/cartographer_rviz.pc
-/root/ME5413_Final_Project/devel/.private/cartographer_rviz/share/cartographer_rviz/cmake/cartographer_rvizConfig.cmake /root/ME5413_Final_Project/devel/share/cartographer_rviz/cmake/cartographer_rvizConfig.cmake
-/root/ME5413_Final_Project/devel/.private/cartographer_rviz/share/cartographer_rviz/cmake/cartographer_rvizConfig-version.cmake /root/ME5413_Final_Project/devel/share/cartographer_rviz/cmake/cartographer_rvizConfig-version.cmake

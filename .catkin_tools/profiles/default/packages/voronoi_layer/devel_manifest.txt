@@ -1,5 +1,0 @@
-third_party/ros_motion_planning/third_party/map_plugins/voronoi_layer
-/root/ME5413_Final_Project/devel/.private/voronoi_layer/lib/libvoronoi_layer.so /root/ME5413_Final_Project/devel/lib/libvoronoi_layer.so
-/root/ME5413_Final_Project/devel/.private/voronoi_layer/lib/pkgconfig/voronoi_layer.pc /root/ME5413_Final_Project/devel/lib/pkgconfig/voronoi_layer.pc
-/root/ME5413_Final_Project/devel/.private/voronoi_layer/share/voronoi_layer/cmake/voronoi_layerConfig.cmake /root/ME5413_Final_Project/devel/share/voronoi_layer/cmake/voronoi_layerConfig.cmake
-/root/ME5413_Final_Project/devel/.private/voronoi_layer/share/voronoi_layer/cmake/voronoi_layerConfig-version.cmake /root/ME5413_Final_Project/devel/share/voronoi_layer/cmake/voronoi_layerConfig-version.cmake

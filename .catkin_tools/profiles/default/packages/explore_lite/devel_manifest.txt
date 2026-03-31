@@ -1,5 +1,0 @@
-third_party/m-explore/explore
-/root/ME5413_Final_Project/devel/.private/explore_lite/lib/explore_lite/explore /root/ME5413_Final_Project/devel/lib/explore_lite/explore
-/root/ME5413_Final_Project/devel/.private/explore_lite/lib/pkgconfig/explore_lite.pc /root/ME5413_Final_Project/devel/lib/pkgconfig/explore_lite.pc
-/root/ME5413_Final_Project/devel/.private/explore_lite/share/explore_lite/cmake/explore_liteConfig-version.cmake /root/ME5413_Final_Project/devel/share/explore_lite/cmake/explore_liteConfig-version.cmake
-/root/ME5413_Final_Project/devel/.private/explore_lite/share/explore_lite/cmake/explore_liteConfig.cmake /root/ME5413_Final_Project/devel/share/explore_lite/cmake/explore_liteConfig.cmake

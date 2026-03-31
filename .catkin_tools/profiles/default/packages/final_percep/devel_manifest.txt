@@ -1,4 +1,0 @@
-final_percep
-/root/ME5413_Final_Project/devel/.private/final_percep/lib/pkgconfig/final_percep.pc /root/ME5413_Final_Project/devel/lib/pkgconfig/final_percep.pc
-/root/ME5413_Final_Project/devel/.private/final_percep/share/final_percep/cmake/final_percepConfig.cmake /root/ME5413_Final_Project/devel/share/final_percep/cmake/final_percepConfig.cmake
-/root/ME5413_Final_Project/devel/.private/final_percep/share/final_percep/cmake/final_percepConfig-version.cmake /root/ME5413_Final_Project/devel/share/final_percep/cmake/final_percepConfig-version.cmake

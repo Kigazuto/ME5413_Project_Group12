@@ -1,5 +1,0 @@
-third_party/ros_motion_planning/core/global_planner/global_planner
-/root/ME5413_Final_Project/devel/.private/global_planner/lib/libglobal_planner.so /root/ME5413_Final_Project/devel/lib/libglobal_planner.so
-/root/ME5413_Final_Project/devel/.private/global_planner/lib/pkgconfig/global_planner.pc /root/ME5413_Final_Project/devel/lib/pkgconfig/global_planner.pc
-/root/ME5413_Final_Project/devel/.private/global_planner/share/global_planner/cmake/global_plannerConfig.cmake /root/ME5413_Final_Project/devel/share/global_planner/cmake/global_plannerConfig.cmake
-/root/ME5413_Final_Project/devel/.private/global_planner/share/global_planner/cmake/global_plannerConfig-version.cmake /root/ME5413_Final_Project/devel/share/global_planner/cmake/global_plannerConfig-version.cmake

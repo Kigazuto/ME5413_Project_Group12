@@ -1,5 +1,0 @@
-third_party/ros_motion_planning/core/curve_generation
-/root/ME5413_Final_Project/devel/.private/curve_generation/lib/libcurve_generation.so /root/ME5413_Final_Project/devel/lib/libcurve_generation.so
-/root/ME5413_Final_Project/devel/.private/curve_generation/lib/pkgconfig/curve_generation.pc /root/ME5413_Final_Project/devel/lib/pkgconfig/curve_generation.pc
-/root/ME5413_Final_Project/devel/.private/curve_generation/share/curve_generation/cmake/curve_generationConfig-version.cmake /root/ME5413_Final_Project/devel/share/curve_generation/cmake/curve_generationConfig-version.cmake
-/root/ME5413_Final_Project/devel/.private/curve_generation/share/curve_generation/cmake/curve_generationConfig.cmake /root/ME5413_Final_Project/devel/share/curve_generation/cmake/curve_generationConfig.cmake

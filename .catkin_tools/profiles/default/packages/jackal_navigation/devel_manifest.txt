@@ -1,4 +1,0 @@
-jackal/jackal_navigation
-/root/ME5413_Final_Project/devel/.private/jackal_navigation/lib/pkgconfig/jackal_navigation.pc /root/ME5413_Final_Project/devel/lib/pkgconfig/jackal_navigation.pc
-/root/ME5413_Final_Project/devel/.private/jackal_navigation/share/jackal_navigation/cmake/jackal_navigationConfig-version.cmake /root/ME5413_Final_Project/devel/share/jackal_navigation/cmake/jackal_navigationConfig-version.cmake
-/root/ME5413_Final_Project/devel/.private/jackal_navigation/share/jackal_navigation/cmake/jackal_navigationConfig.cmake /root/ME5413_Final_Project/devel/share/jackal_navigation/cmake/jackal_navigationConfig.cmake
