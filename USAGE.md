@@ -163,6 +163,12 @@ catkin build
 source /root/ME5413_Final_Project/devel/setup.bash
 ```
 
+### Python 节点可执行权限
+
+作为 `roslaunch` / `rosrun` 入口的 `.py` 文件已在各包的 `CMakeLists.txt` 里用 `catkin_install_python` 注册。`catkin build` 后会在 `devel/lib/<包名>/` 下生成可执行的包装脚本，**一般不必**再对源码逐个 `chmod +x`。
+
+若你从不保留可执行位的环境同步代码（例如 Windows 或 `git config core.filemode false`），而构建后仍提示 permission denied，可对仓库内脚本统一补一次执行位并提交：`git update-index --chmod=+x -- path/to/script.py`。
+
 ---
 
 ## 关键配置文件

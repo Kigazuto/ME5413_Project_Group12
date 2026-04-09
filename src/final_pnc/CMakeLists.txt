@@ -69,6 +69,9 @@ target_link_libraries(rrt_planner_node
 
 
 catkin_install_python(PROGRAMS
-  src/utils.py
+  src/nmpc_node.py
+  src/pub_goal.py
+  src/pub_reach.py
+  src/eval_pnc.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
