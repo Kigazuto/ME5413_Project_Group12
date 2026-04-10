@@ -20,11 +20,11 @@ MPCLocalPlanner:
 
   T: 0.05 # forward time step
   N: 20 # number of prediction steps
-  vel_ref: 1.0 # 2->1.0 降速防上坡打滑
-  max_vel: 1.2 # 2->1.2
-  max_omega: 1.5 # 2->1.5
-  max_lin_acc: 5 # 15->5 温和加速
-  max_ang_acc: 8 # 20->8
+  vel_ref: 0.85 # 直线效率和计数稳定性的折中
+  max_vel: 1.0 # 保留一定直线效率
+  max_omega: 0.45 # 压低转向角速度，但不至于过慢
+  max_lin_acc: 4 # 温和加速
+  max_ang_acc: 3.5 # 转向建立更平滑
   Q: [5, 5, 0] # weights for x, y, theta, respectively
   R: [0.2, 0.2] # weights for vel_x, omega, respectively
 

@@ -1,0 +1,30 @@
+<launch>
+  <node name="manual_box_counter" pkg="final_percep" type="manual_box_counter.py" output="screen">
+    <param name="rate" value="8.0" />
+    <param name="use_gpu" value="true" />
+
+    <param name="min_confidence" value="0.5" />
+    <param name="min_diag" value="20.0" />
+    <param name="confirm_hits" value="2" />
+    <param name="confirm_avg_conf" value="0.6" />
+    <param name="candidate_merge_dist" value="1.0" />
+    <param name="confirmed_merge_dist" value="1.2" />
+    <param name="candidate_stale_sec" value="4.0" />
+    <param name="scan_search_radius" value="3" />
+    <param name="min_range" value="0.2" />
+    <param name="max_range" value="20.0" />
+    <param name="range_offset" value="0.0" />
+
+    <param name="x_min" value="-30.0" />
+    <param name="x_max" value="20.0" />
+    <param name="y_min" value="-15.0" />
+    <param name="y_max" value="15.0" />
+
+    <!-- map occupancy gate -->
+    <param name="map_topic" value="/map" />
+    <param name="occupancy_threshold" value="50" />
+    <param name="map_check_radius_cells" value="2" />
+    <param name="reject_unknown" value="false" />
+    <param name="require_map_ready" value="true" />
+  </node>
+</launch>

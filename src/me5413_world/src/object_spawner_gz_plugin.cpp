@@ -36,6 +36,7 @@ void ObjectSpawner::Load(physics::WorldPtr _world, sdf::ElementPtr _sdf)
   node->Init(_world->Name());
   clt_delete_objects_ = nh_.serviceClient<gazebo_msgs::DeleteModel>("/gazebo/delete_model");
   clt_get_world_properties_ = nh_.serviceClient<gazebo_msgs::GetWorldProperties>("/gazebo/get_world_properties");
+  clt_spawn_sdf_model_ = nh_.serviceClient<gazebo_msgs::SpawnModel>("/gazebo/spawn_sdf_model");
   this->timer_ = nh_.createTimer(ros::Duration(0.1), &ObjectSpawner::timerCallback, this);
   this->pub_factory_ = node->Advertise<msgs::Factory>("~/factory");
   this->sub_respawn_objects_ = nh_.subscribe("/rviz_panel/respawn_objects", 1, &ObjectSpawner::respawnCmdCallback, this);
@@ -115,6 +116,46 @@ bool ObjectSpawner::waitModelState(const std::string& name, bool should_exist, d
   return false;
 }
 
+bool ObjectSpawner::spawnModelFromFile(
+  const std::string& model_file,
+  const std::string& instance_name,
+  const ignition::math::Vector3d& point,
+  double yaw)
+{
+  std::ifstream ifs(model_file);
+  if (!ifs.is_open())
+  {
+    ROS_ERROR_STREAM("spawnModelFromFile: failed to open " << model_file);
+    return false;
+  }
+
+  std::stringstream buffer;
+  buffer << ifs.rdbuf();
+
+  gazebo_msgs::SpawnModel srv;
+  srv.request.model_name = instance_name;
+  srv.request.model_xml = buffer.str();
+  srv.request.robot_namespace = "";
+  srv.request.reference_frame = "world";
+  srv.request.initial_pose.position.x = point.X();
+  srv.request.initial_pose.position.y = point.Y();
+  srv.request.initial_pose.position.z = point.Z();
+  srv.request.initial_pose.orientation.z = std::sin(yaw * 0.5);
+  srv.request.initial_pose.orientation.w = std::cos(yaw * 0.5);
+
+  if (!clt_spawn_sdf_model_.call(srv))
+  {
+    ROS_ERROR_STREAM("spawnModelFromFile: service call failed for " << instance_name);
+    return false;
+  }
+  if (!srv.response.success)
+  {
+    ROS_ERROR_STREAM("spawnModelFromFile: " << instance_name << " -- " << srv.response.status_message);
+    return false;
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Spawn helpers
 // ---------------------------------------------------------------------------
@@ -140,6 +181,7 @@ bool ObjectSpawner::spawnRandomBoxes()
   this->box_names.clear();
   this->box_points.clear();
   this->box_markers_msg_.markers.clear();
+  const std::string models_root = ros::package::getPath("me5413_world") + "/models/";
 
   std::vector<int> box_labels = {1, 2, 3, 4, 5, 6, 7, 8, 9};
   std::vector<int> box_nums = {1, 2, 3, 4, 5};
@@ -169,13 +211,15 @@ bool ObjectSpawner::spawnRandomBoxes()
   const double spacing = (DEST_MAX_Y_COORD - DEST_MIN_Y_COORD)/(box_labels.size());
   for (size_t i = 0; i < box_labels.size(); i++)
   {
-    const ignition::math::Vector3d point = ignition::math::Vector3d(DEST_MAX_X_COORD, spacing*(i+0.5) + DEST_MIN_Y_COORD, DEST_Z_COORD + BOX_SIZE/2);
-    msgs::Factory box_msg;
+    const ignition::math::Vector3d point = ignition::math::Vector3d(DEST_MAX_X_COORD, spacing*(i+0.5) + DEST_MIN_Y_COORD, DEST_Z_COORD);
     const std::string box_name = "number" + std::to_string(box_labels[i]);
+    const std::string blocker_name = box_name + "_blocker";
     this->box_names.push_back(box_name);
-    box_msg.set_sdf_filename("model://" + box_name);
-    msgs::Set(box_msg.mutable_pose(), ignition::math::Pose3d(point, ignition::math::Quaterniond(0, 0, -1.5708)));
-    this->pub_factory_->Publish(box_msg);
+    this->box_names.push_back(blocker_name);
+    if (!spawnModelFromFile(models_root + box_name + "/model.sdf", box_name, point, -1.5708))
+      return false;
+    if (!spawnModelFromFile(models_root + "number_blocker/model.sdf", blocker_name, point, -1.5708))
+      return false;
     ROS_DEBUG_STREAM("Generated " << box_name << " at " << point);
     common::Time::MSleep(500);
   }
@@ -190,7 +234,7 @@ bool ObjectSpawner::spawnRandomBoxes()
       has_collision = false;
       point = ignition::math::Vector3d(static_cast<double>(std::rand()) / RAND_MAX * (MAX_X_COORD - MIN_X_COORD) + MIN_X_COORD,
                                        static_cast<double>(std::rand()) / RAND_MAX * (MAX_Y_COORD - MIN_Y_COORD) + MIN_Y_COORD,
-                                       Z_COORD + BOX_SIZE/2);
+                                       Z_COORD);
 
       if (std::abs(point.X() - (-10.0)) <= 2.0)
       {
@@ -211,12 +255,15 @@ bool ObjectSpawner::spawnRandomBoxes()
 
     this->box_points.push_back(point);
 
-    msgs::Factory box_msg;
     const std::string box_name = "number" + std::to_string(boxes[i][0]);
-    box_msg.set_sdf_filename("model://" + box_name);
-    this->box_names.push_back("number" + std::to_string(boxes[i][0]) + "_" + std::to_string(boxes[i][1]));
-    msgs::Set(box_msg.mutable_pose(), ignition::math::Pose3d(point, ignition::math::Quaterniond(0, 0, -1.5708)));
-    this->pub_factory_->Publish(box_msg);
+    const std::string inst_name = "number" + std::to_string(boxes[i][0]) + "_" + std::to_string(boxes[i][1]);
+    const std::string blocker_name = inst_name + "_blocker";
+    this->box_names.push_back(inst_name);
+    this->box_names.push_back(blocker_name);
+    if (!spawnModelFromFile(models_root + box_name + "/model.sdf", inst_name, point, -1.5708))
+      return false;
+    if (!spawnModelFromFile(models_root + "number_blocker/model.sdf", blocker_name, point, -1.5708))
+      return false;
     ROS_DEBUG_STREAM("Generated " << box_name << " at " << point);
     common::Time::MSleep(500);
   }

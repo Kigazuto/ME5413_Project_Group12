@@ -8,7 +8,9 @@
 
 #include <ctime>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <random>
@@ -17,6 +19,7 @@
 
 #include <ros/ros.h>
 #include <ros/console.h>
+#include <ros/package.h>
 #include <std_msgs/Int16.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/String.h>
@@ -33,6 +36,7 @@
 #include <gazebo/physics/physics.hh>
 #include <gazebo_msgs/DeleteModel.h>
 #include <gazebo_msgs/GetWorldProperties.h>
+#include <gazebo_msgs/SpawnModel.h>
 
 namespace gazebo
 {
@@ -56,6 +60,7 @@ class ObjectSpawner : public WorldPlugin
   ros::Timer timer_;
   ros::ServiceClient clt_delete_objects_;
   ros::ServiceClient clt_get_world_properties_;
+  ros::ServiceClient clt_spawn_sdf_model_;
   ros::Subscriber sub_respawn_objects_;
   ros::Subscriber sub_cmd_open_bridge_;
   ros::Publisher pub_rviz_markers_;
@@ -76,6 +81,11 @@ class ObjectSpawner : public WorldPlugin
   void timerCallback(const ros::TimerEvent&);
   bool modelExists(const std::string& name);
   bool waitModelState(const std::string& name, bool should_exist, double timeout_sec);
+  bool spawnModelFromFile(
+    const std::string& model_file,
+    const std::string& instance_name,
+    const ignition::math::Vector3d& point,
+    double yaw);
   void spawnRandomBridge();  //deprecated for 2526
   bool spawnRandomBoxes();
   bool deleteObject(const std::string& object_name);

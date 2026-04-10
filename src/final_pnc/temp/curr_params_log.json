@@ -1,5 +1,5 @@
 {
-    "time": "2026-04-10 09:08:18",
+    "time": "2026-04-11 01:08:56",
     "method": "mpc",
     "map_frame": "map",
     "ref_path_topic": "/move_base/TrajectoryPlannerROS/global_plan",
@@ -11,11 +11,11 @@
     "freq": 50,
     "xy_tol": 0.15,
     "ang_tol": 0.17453292519943295,
-    "vel_ref": 1.0,
-    "max_vel": 1.0,
-    "max_lin_acc": 5,
-    "max_ang_acc": 8,
-    "max_omega": 1.5,
+    "vel_ref": 0.85,
+    "max_vel": 0.85,
+    "max_lin_acc": 4,
+    "max_ang_acc": 3.5,
+    "max_omega": 0.45,
     "N": 20,
     "T": 0.05,
     "Q": [

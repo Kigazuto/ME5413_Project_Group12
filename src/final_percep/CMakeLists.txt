@@ -155,6 +155,7 @@ include_directories(
 
 catkin_install_python(PROGRAMS
   src/visual.py
+  src/manual_box_counter.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

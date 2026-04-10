@@ -52,6 +52,7 @@
 
   <depend>rospy</depend>
   <depend>roscpp</depend>
+  <depend>roslib</depend>
   <depend>std_msgs</depend>
   <depend>rviz</depend>
   <depend>gazebo_ros</depend>
