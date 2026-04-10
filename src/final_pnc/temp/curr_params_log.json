@@ -1,5 +1,5 @@
 {
-    "time": "2026-04-11 01:08:56",
+    "time": "2026-04-11 02:55:31",
     "method": "mpc",
     "map_frame": "map",
     "ref_path_topic": "/move_base/TrajectoryPlannerROS/global_plan",

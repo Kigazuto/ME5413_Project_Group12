@@ -1,3 +1,71 @@
- <launch>
-    <node name="visual" pkg="final_percep" type="visual.py" respawn="true"/>
- </launch>
+<launch>
+  <node name="visual" pkg="final_percep" type="percep_node.py" respawn="true" output="screen">
+
+    <!-- topics / frames -->
+    <param name="image_topic" value="/front/image_raw" />
+    <param name="scan_topic" value="/front/scan" />
+    <param name="camera_info_topic" value="/front/camera_info" />
+    <param name="odom_topic" value="/final_slam/odom" />
+    <param name="map_topic" value="/map" />
+    <param name="map_frame" value="map" />
+
+    <!-- runtime -->
+    <param name="rate" value="8.0" />
+    <param name="use_gpu" value="true" />
+
+    <!-- count mode OCR -->
+    <param name="min_confidence" value="0.5" />
+    <param name="min_diag" value="20.0" />
+    <param name="confirm_hits" value="2" />
+    <param name="confirm_avg_conf" value="0.6" />
+    <param name="vote_min_ratio" value="0.65" />
+    <param name="vote_min_margin" value="1.5" />
+
+    <!-- count mode clustering -->
+    <param name="candidate_merge_dist" value="1.0" />
+    <param name="confirmed_merge_dist" value="1.2" />
+    <param name="candidate_stale_sec" value="4.0" />
+    <param name="confirm_cooldown_sec" value="8.0" />
+
+    <!-- lidar / range -->
+    <param name="scan_search_radius" value="3" />
+    <param name="min_range" value="0.2" />
+    <param name="max_range" value="20.0" />
+    <param name="range_offset" value="0.0" />
+
+    <!-- count mode valid region -->
+    <param name="x_min" value="-30.0" />
+    <param name="x_max" value="20.0" />
+    <param name="y_min" value="-15.0" />
+    <param name="y_max" value="15.0" />
+
+    <!-- number mode OCR -->
+    <param name="number_min_confidence" value="0.8" />
+    <param name="number_min_diag" value="40.0" />
+
+    <!-- number mode valid region -->
+    <param name="number_x_min" value="7.0" />
+    <param name="number_x_max" value="17.0" />
+    <param name="number_y_min" value="-7.2" />
+    <param name="number_y_max" value="2.0" />
+
+    <!-- motion gate -->
+    <param name="max_linear_speed" value="0.45" />
+    <param name="max_angular_speed" value="0.08" />
+    <param name="stable_window_sec" value="0.5" />
+    <param name="cooldown_after_turn_sec" value="0.8" />
+    <param name="require_stable_for_count" value="true" />
+    <param name="require_stable_for_number" value="false" />
+
+    <!-- sync -->
+    <param name="sync_slop_sec" value="0.12" />
+
+    <!-- map occupancy gate -->
+    <param name="map_topic" value="/map" />
+    <param name="occupancy_threshold" value="50" />
+    <param name="map_check_radius_cells" value="2" />
+    <param name="reject_unknown" value="false" />
+    <param name="require_map_ready" value="true" />
+
+  </node>
+</launch>
