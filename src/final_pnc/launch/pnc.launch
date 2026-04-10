@@ -74,12 +74,14 @@
    <group if="$(eval arg('local_planner') == 'mpc')">
      <arg name="make_plan_topic" value="$(eval arg('global_planner') == 'navfn/NavfnROS' and '/move_base/NavfnROS/make_plan' or '/move_base/make_plan')" />
      <arg name="make_plan_local_topic" value="$(eval arg('local_replanner') == 'navfn/NavfnROS' and '/move_base_local/move_base_local/NavfnROS/make_plan' or '/move_base_local/make_plan')" />
+    <arg name="make_plan_tolerance" default="0.8" />
  
      <rosparam file="$(find final_pnc)/config/nav_params/mpc.yaml" command="load" />
  
      <node pkg="final_pnc" type="nmpc_node.py" name="MPCLocalPlanner" output="screen" respawn="true" launch-prefix="bash -c 'sleep 3.0; $0 $@';">
          <param name="make_plan_topic" value="$(arg make_plan_topic)" />
          <param name="make_plan_local_topic" value="$(arg make_plan_local_topic)" />
+        <param name="make_plan_tolerance" value="$(arg make_plan_tolerance)" />
      </node>
  </group>
 

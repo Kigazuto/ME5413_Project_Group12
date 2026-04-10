@@ -24,6 +24,11 @@ from dynamic_reconfigure.server import Server as DynServer
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped, Twist
 from nav_msgs.msg import Odometry, Path
 from nav_msgs.srv import GetPlan
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
 from nmpc_controller import NMPCC
 from std_msgs.msg import Bool, Float32, Int8
 from utils import (
@@ -83,6 +88,7 @@ class NMPCNode:
         self.odom_topic = rospy.get_param("~odom_topic", "/final_slam/odom")
         self.make_plan_topic = rospy.get_param("~make_plan_topic", "/move_base/NavfnROS/make_plan")
         self.make_plan_local_topic = rospy.get_param("~make_plan_local_topic", "/move_base_local/move_base_local/NavfnROS/make_plan")
+        self.make_plan_tolerance = rospy.get_param("~make_plan_tolerance", 0.8)
         self.xy_tol = rospy.get_param("~xy_tol", 0.1)
         self.ang_tol = np.deg2rad(rospy.get_param("~ang_tol", 10))
         self.vel_ref = rospy.get_param("~vel_ref", 1.5)
@@ -133,6 +139,7 @@ class NMPCNode:
             "odom_topic": self.odom_topic,
             "make_plan_topic": self.make_plan_topic,
             "make_plan_local_topic": self.make_plan_local_topic,
+            "make_plan_tolerance": self.make_plan_tolerance,
             "local_window_size": self.local_window_size,
             "freq": self.freq,
             "xy_tol": self.xy_tol,
@@ -214,7 +221,7 @@ class NMPCNode:
         curr_pose.pose = self.curr_odom.pose.pose
         st = time.time()
         try:
-            self.global_path = self.get_plan_srv.call(curr_pose, msg, 0).plan
+            self.global_path = self.get_plan_srv.call(curr_pose, msg, self.make_plan_tolerance).plan
         except rospy.ServiceException as e:
             rospy.logerr("Service call failed: %s", e)
             self.pub_error()
@@ -381,10 +388,12 @@ class NMPCNode:
             curr_pose_stam.header = self.curr_odom.header
             curr_pose_stam.header.frame_id = "map"
             curr_pose_stam.pose = self.curr_odom.pose.pose
-            local_path = self.get_plan_local_srv.call(curr_pose_stam, win_inter_point, 0).plan
+            local_path = self.get_plan_local_srv.call(
+                curr_pose_stam, win_inter_point, self.make_plan_tolerance
+            ).plan
             if local_path is None or len(local_path.poses) == 0:
                 local_path = self.get_plan_local_srv.call(
-                    curr_pose_stam, self.goal_pose, 0
+                    curr_pose_stam, self.goal_pose, self.make_plan_tolerance
                 ).plan  # if fail, replan to goal
                 if local_path is None or len(local_path.poses) == 0:
                     # Fallback: keep tracking remaining global path to avoid deadlock at ramps/corridors.

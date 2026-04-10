@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import sys
 
 import rospy
@@ -9,6 +10,11 @@ import tf2_ros
 import tf_conversions
 from geometry_msgs.msg import Pose, PoseStamped, Twist
 from nav_msgs.msg import Odometry
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
 from states import (
     IdleState, Task1ToTask2, Task1Tracking, Task2Entry, Task2State, Task3Tracking,
     LowerFloorExploreState, UnblockExitState, NavigateUpperState,
@@ -18,7 +24,10 @@ from std_msgs.msg import Bool, String
 
 from final_pnc.msg import ReachGoal
 
-sys.path.append(sys.path[0] + "/../../final_pnc/src/")
+FINAL_PNC_SRC = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "final_pnc", "src"))
+if FINAL_PNC_SRC not in sys.path:
+    sys.path.insert(0, FINAL_PNC_SRC)
+
 from utils import euclidian_dist_se2, ndarray2pose_se2, pose2ndarray_se2
 
 turning_points = [(4.75, -6.5, 1), (4.75, 1.2, 1.5), (0.7, 2.7, 1.5), (11.5, 3.5, 1)]

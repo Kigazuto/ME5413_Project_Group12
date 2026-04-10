@@ -106,8 +106,8 @@ me5413_world:
 
   # Ramp top (upper floor entry)
   ramp_top:
-    x: 8.0
-    y: -12.0
+    x: 7.0
+    y: -11.2
     yaw: 0.0
 
   # Upper floor corridor waypoints

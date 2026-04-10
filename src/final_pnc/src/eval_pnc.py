@@ -12,6 +12,11 @@ from std_msgs.msg import Float32
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid, Odometry
 from sensor_msgs.msg import Imu
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
 from utils import euclidian_dist_se2, ndarray2pose_stamp_se2, pose2ndarray_se2, quat2yaw
 from final_pnc.msg import ReachGoal
 
