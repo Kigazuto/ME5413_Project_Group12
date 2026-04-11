@@ -55,9 +55,9 @@ class LowerFloorExploreState(State):
         self.stable_count = 0
         self.last_counts_str = ""
         self.explore_start_time = None
-        self.min_explore_time = 60.0  # minimum seconds to explore
-        self.max_explore_time = 180.0  # maximum seconds to explore
-        self.stable_threshold = 15  # how many cycles counts must be stable
+        self.min_explore_time = 90.0  # must complete 1 full loop
+        self.max_explore_time = 150.0  # hard cutoff
+        self.stable_threshold = 20  # how many cycles counts must be stable
 
     def init(self, args=None):
         rospy.loginfo("=== Starting Lower Floor Exploration (Counting Boxes) ===")
@@ -71,7 +71,7 @@ class LowerFloorExploreState(State):
 
         # Wait for objects_ready signal with timeout and one retry
         for attempt in range(2):
-            deadline = rospy.Time.now() + rospy.Duration(15.0)
+            deadline = rospy.Time.now() + rospy.Duration(30.0)
             while not rospy.is_shutdown() and not self.robot.objects_ready:
                 if rospy.Time.now() > deadline:
                     break
@@ -110,6 +110,25 @@ class LowerFloorExploreState(State):
         # Navigate to first waypoint
         self._send_next_waypoint()
 
+    def _send_scan_goal(self):
+        """Send a goal at current position but with a different yaw to rotate in place."""
+        import tf_conversions
+        if self.robot.robot_odom.header.frame_id == "":
+            return
+        goal = PoseStamped()
+        goal.header.stamp = rospy.Time.now()
+        goal.header.frame_id = self.robot.robot_odom.header.frame_id
+        goal.pose.position.x = self.robot.robot_odom.pose.position.x
+        goal.pose.position.y = self.robot.robot_odom.pose.position.y
+        yaw = self._scan_yaws[self._scan_step]
+        q = tf_conversions.transformations.quaternion_from_euler(0, 0, yaw)
+        goal.pose.orientation.x = q[0]
+        goal.pose.orientation.y = q[1]
+        goal.pose.orientation.z = q[2]
+        goal.pose.orientation.w = q[3]
+        self.robot.pub_goal.publish(goal)
+        self.robot.goal_reached = False
+
     def _send_next_waypoint(self):
         if self.current_wp_idx < len(self.explore_waypoints):
             wp_name = self.explore_waypoints[self.current_wp_idx]
@@ -143,7 +162,7 @@ class LowerFloorExploreState(State):
         if self._get_goal_reached():
             self.current_wp_idx += 1
             if self.current_wp_idx >= len(self.explore_waypoints):
-                self.current_wp_idx = 0  # loop back
+                self.current_wp_idx = 0
             self._send_next_waypoint()
 
         # Check if we should stop exploring
@@ -224,7 +243,7 @@ class NavigateUpperState(State):
 
     def __init__(self, robot):
         super().__init__(robot)
-        self.waypoints = ["/ramp_bottom", "/ramp_top", "/corridor_1", "/corridor_2", "/task1_crossing_1"]
+        self.waypoints = ["/ramp_bottom", "/ramp_top", "/corridor_1", "/corridor_2", "/room_entry_check"]
         self.current_wp_idx = 0
         self.wp_sent_time = None
         self.wp_retry_count = 0
@@ -258,8 +277,8 @@ class NavigateUpperState(State):
         self.current_wp_idx += 1
         self.wp_retry_count = 0
         if self.current_wp_idx >= len(self.waypoints):
-            rospy.loginfo("=== Reached door detection point ===")
-            self.robot.set_state(self.robot.detect_door_state, None)
+            rospy.loginfo("=== At room entry check point, checking for cone ===")
+            self.robot.set_state(self.robot.door_entry_state, None)
         else:
             self._send_next_waypoint()
 
@@ -295,28 +314,33 @@ class DetectDoorState(State):
         self.check_start_time = None
         self.check_duration = 3.0  # seconds to observe each door
 
+    PHASE_TIMEOUT = 15.0  # seconds before skipping a phase
+
     def init(self, args=None):
         rospy.loginfo("=== Detecting which door is blocked by cone ===")
         self.phase = 0
         self.door1_red = False
         self.door2_red = False
+        self._phase_start = rospy.Time.now()
         # Navigate toward door 1 direction to look
         goal = self.robot.get_goal_pose_from_config_map("/task2_entry_1")
         if goal is not None:
-            # Don't go all the way, just face that direction from crossing point
             crossing = self.robot.get_goal_pose_from_config_map("/task1_crossing_1")
             if crossing is not None:
                 crossing.pose.orientation = goal.pose.orientation
                 self.robot.pub_goal.publish(crossing)
                 self.robot.goal_reached = False
 
+    def _phase_timed_out(self):
+        return (rospy.Time.now() - self._phase_start).to_sec() > self.PHASE_TIMEOUT
+
     def execute(self):
-        if self.phase == 0 and self._get_goal_reached():
-            # Arrived facing door 1, start checking for red
+        if self.phase == 0 and (self._get_goal_reached() or self._phase_timed_out()):
+            # Arrived facing door 1, start checking for red/orange
             self.phase = 1
             self.check_start_time = rospy.Time.now()
             self.robot.pub_percep_cmd.publish("red")
-            self.robot.percept_wait = "red_check"  # special mode, don't auto-transition
+            self.robot.percept_wait = "red_check"
             rospy.loginfo("Looking at door 1...")
 
         elif self.phase == 1:
@@ -324,6 +348,7 @@ class DetectDoorState(State):
             if elapsed > self.check_duration:
                 # Done checking door 1, now look at door 2
                 self.phase = 2
+                self._phase_start = rospy.Time.now()
                 self.robot.percept_wait = ""
                 goal = self.robot.get_goal_pose_from_config_map("/task2_entry_2")
                 if goal is not None:
@@ -333,7 +358,7 @@ class DetectDoorState(State):
                         self.robot.pub_goal.publish(crossing)
                         self.robot.goal_reached = False
 
-        elif self.phase == 2 and self._get_goal_reached():
+        elif self.phase == 2 and (self._get_goal_reached() or self._phase_timed_out()):
             self.phase = 3
             self.check_start_time = rospy.Time.now()
             self.robot.pub_percep_cmd.publish("red")
@@ -369,79 +394,262 @@ class DetectDoorState(State):
 
 
 class DoorEntryState(State):
-    """Enter through the unblocked door."""
-
-    def init(self, args):
-        # args = True means red detected on entry_1 side, use entry_2
-        # args = False means red not on entry_1 side, use entry_1
-        if args:
-            rospy.loginfo("Cone on door 1, using door 2")
-            goal = self.robot.get_goal_pose_from_config_map("/task2_entry_2")
-        else:
-            rospy.loginfo("Cone on door 2, using door 1")
-            goal = self.robot.get_goal_pose_from_config_map("/task2_entry_1")
-        if goal is not None:
-            self.robot.pub_goal.publish(goal)
-            self.robot.goal_reached = False
-
-    def execute(self):
-        if self._get_goal_reached():
-            rospy.loginfo("=== Entered upper floor main room ===")
-            self.robot.set_state(self.robot.find_target_state, None)
-
-
-class FindTargetBoxState(State):
-    """Navigate inside the room to find and stop at the least-occurring box."""
+    """Check cone at (12,-5), if blocked go to (12,5) entry instead."""
 
     def __init__(self, robot):
         super().__init__(robot)
-        self.gcostmap_client = None
+        from sensor_msgs.msg import LaserScan
+        self.scan_sub = rospy.Subscriber("/front/scan", LaserScan, self._scan_cb)
+        self.front_min = float('inf')
+
+    def _scan_cb(self, msg):
+        n = len(msg.ranges)
+        center = n // 2
+        spread = n // 8
+        front = msg.ranges[center - spread : center + spread]
+        valid = [r for r in front if r > 0.3 and r < msg.range_max]
+        self.front_min = min(valid) if valid else float('inf')
+
+    def init(self, args):
+        # Phase 0: already at check point (13,-5), check if blocked
+        # Phase 1: going to chosen entry
         self.phase = 0
-
-    def init(self, args=None):
-        rospy.loginfo(f"=== Finding target box: {self.robot.target_box_number} ===")
-        self.phase = 0
-
-        # Shrink footprint for tight spaces
-        try:
-            self.gcostmap_client = DynamicReconfigureClient("/move_base/global_costmap/", timeout=10)
-            self.gcostmap_client.update_configuration(
-                {"footprint": [[-0.05, -0.05], [-0.05, 0.05], [0.05, 0.05], [0.05, -0.05]]}
-            )
-        except Exception as e:
-            rospy.logwarn(f"Could not update costmap footprint: {e}")
-
-        # Set number of interest in perception via topic
-        self.robot.noi = self.robot.target_box_number
-        self.robot.pub_set_noi.publish(String(data=self.robot.target_box_number))
-
-        # Start explore + number detection
-        self.robot.pub_explore.publish(True)
-        self.robot.pub_percep_cmd.publish("number")
-        self.robot.percept_wait = "number"
-        self.robot.number_pose = None
-        self.robot.goal_reached = False
+        self._goal_time = rospy.Time.now()
+        # We should already be at room_entry_check (13,-5) facing left
+        # Check immediately if cone is in front
+        rospy.loginfo("Checking for cone at entry (12,-5)...")
 
     def execute(self):
         if self.phase == 0:
+            # Check if cone is blocking (12,-5) entry
+            elapsed = (rospy.Time.now() - self._goal_time).to_sec()
+            if elapsed > 2.0:  # wait 2s for stable lidar reading
+                if self.front_min < 3.0:
+                    rospy.logwarn(f"Entry (12,-5) blocked by cone ({self.front_min:.2f}m), using (12,5)")
+                    goal = self.robot.get_goal_pose_from_config_map("/room_entry_clear")
+                else:
+                    rospy.loginfo("Entry (12,-5) clear, going in")
+                    goal = self.robot.get_goal_pose_from_config_map("/room_entry_blocked")
+                self.phase = 1
+                self._goal_time = rospy.Time.now()
+                if goal is not None:
+                    self.robot.pub_goal.publish(goal)
+                    self.robot.goal_reached = False
+
+        elif self.phase == 1:
+            if self._get_goal_reached():
+                rospy.loginfo("=== Entered upper floor main room ===")
+                self.robot.set_state(self.robot.find_target_state, None)
+                return
+            # Resend goal every 15s
+            elapsed = (rospy.Time.now() - self._goal_time).to_sec()
+            if int(elapsed) > 0 and int(elapsed) % 15 == 0:
+                goal = self.robot.get_goal_pose_from_config_map("/room_entry_clear")
+                if goal is not None:
+                    self.robot.pub_goal.publish(goal)
+                    self.robot.goal_reached = False
+
+
+class FindTargetBoxState(State):
+    """Find target box: observe from safe point, then wait for cylinder to pass and enter."""
+
+    ROOM_WAIT_POINTS = ["/room_wait_1", "/room_wait_2", "/room_wait_3", "/room_wait_4"]
+
+    def __init__(self, robot):
+        super().__init__(robot)
+        self.phase = 0
+        from sensor_msgs.msg import LaserScan
+        self.scan_sub = rospy.Subscriber("/front/scan", LaserScan, self._scan_cb)
+        self.front_min = float('inf')
+
+    def _scan_cb(self, msg):
+        n = len(msg.ranges)
+        center = n // 2
+        spread = n // 8
+        front = msg.ranges[center - spread : center + spread]
+        valid = [r for r in front if r > 0.3 and r < msg.range_max]
+        self.front_min = min(valid) if valid else float('inf')
+
+    def init(self, args=None):
+        rospy.loginfo(f"=== Finding target box: {self.robot.target_box_number} ===")
+        # phase 0: go to safe point
+        # phase 1: collect digit from each of 4 rooms
+        # phase 2: go to target room wait point
+        # phase 3: wait for red cylinder to pass
+        # phase 4: enter room
+        self.phase = 0
+        self._phase_start = rospy.Time.now()
+        self._room_digits = {}  # {room_idx: digit_str}
+        self._current_room_digit = None
+
+        # Set perception to number mode but don't filter by noi
+        # We want to see ALL digits
+        self.robot.pub_percep_cmd.publish("number")
+        self.robot.percept_wait = "number"
+        self.robot.number_pose = None
+
+        goal = self.robot.get_goal_pose_from_config_map("/safe_observe")
+        if goal is not None:
+            self.robot.pub_goal.publish(goal)
+            self.robot.goal_reached = False
+            rospy.loginfo("Going to safe observation point")
+
+    def execute(self):
+        elapsed = (rospy.Time.now() - self._phase_start).to_sec()
+
+        if self.phase == 0:
+            if self._get_goal_reached() or elapsed > 30:
+                self.phase = 1
+                self._phase_start = rospy.Time.now()
+                self._scan_idx = 0
+                rospy.loginfo("Collecting digits from 4 rooms...")
+                # Set noi to wildcard - try each digit 1-9
+                self._try_all_digits()
+                self._go_to_next_room_view()
+
+        elif self.phase == 1:
+            # Check if perception found a digit at current room
+            if self.robot.number_pose is not None and self._scan_idx not in self._room_digits:
+                # Read what digit was found
+                digit = self.robot.noi
+                self._room_digits[self._scan_idx] = digit
+                rospy.loginfo(f"Room {self._scan_idx}: digit {digit}")
+                self.robot.number_pose = None
+
+            # Move to next room after time or if digit collected
+            if (self._scan_idx in self._room_digits and elapsed > 3) or elapsed > 20:
+                self._scan_idx += 1
+                if self._scan_idx >= len(self.ROOM_WAIT_POINTS):
+                    # All 4 rooms scanned
+                    rospy.loginfo(f"Room digits collected: {self._room_digits}")
+                    self._decide_target_room()
+                    return
+                self._phase_start = rospy.Time.now()
+                self.robot.number_pose = None
+                self._try_all_digits()
+                self._go_to_next_room_view()
+
+    def _try_all_digits(self):
+        """Set noi to each digit in turn so number mode can detect any digit."""
+        # Cycle through digits - set noi to target first, then others
+        target = self.robot.target_box_number
+        self.robot.noi = target
+        self.robot.pub_set_noi.publish(String(data=target))
+
+    def _decide_target_room(self):
+        """After collecting digits from all rooms, decide which room to enter."""
+        collected = self._room_digits  # {room_idx: digit_str}
+        target = self.robot.target_box_number
+
+        # Check if target digit is in one of the rooms
+        target_room = None
+        for idx, digit in collected.items():
+            if digit == target:
+                target_room = idx
+                break
+
+        if target_room is not None:
+            rospy.loginfo(f"Target {target} found in room {target_room}!")
+        else:
+            # Target not in rooms, pick room with digit that has lowest count from floor 1
+            rospy.logwarn(f"Target {target} not in rooms {collected}")
+            counts = {}
+            if hasattr(self.robot, 'latest_box_counts') and self.robot.latest_box_counts:
+                try:
+                    for item in self.robot.latest_box_counts.split(","):
+                        k, v = item.split(":")
+                        counts[k] = int(v)
+                except Exception:
+                    pass
+
+            # Among room digits, find which has lowest first-floor count
+            best_room = 0
+            best_count = float('inf')
+            for idx, digit in collected.items():
+                c = counts.get(digit, 0)
+                if c < best_count:
+                    best_count = c
+                    best_room = idx
+            target_room = best_room
+            new_target = collected.get(target_room, target)
+            rospy.logwarn(f"Re-selecting target to {new_target} (room {target_room})")
+            self.robot.target_box_number = new_target
+            self.robot.noi = new_target
+            self.robot.pub_set_noi.publish(String(data=new_target))
+
+        # Go to that room's wait point
+        self.phase = 2
+        self._phase_start = rospy.Time.now()
+        wp = self.ROOM_WAIT_POINTS[target_room]
+        goal = self.robot.get_goal_pose_from_config_map(wp)
+        if goal is not None:
+            self.robot.pub_goal.publish(goal)
+            self.robot.goal_reached = False
+            rospy.loginfo(f"Going to wait point {wp}")
+
+        elif self.phase == 2:
+            # Going to wait point near target room
+            if self._get_goal_reached() or elapsed > 30:
+                self.phase = 3
+                self._phase_start = rospy.Time.now()
+                rospy.loginfo("At wait point. Waiting for red cylinder to pass...")
+
+        elif self.phase == 3:
+            # Wait for red cylinder to NOT be in front (> 2m away)
+            if self.robot.red_obstacle_ahead:
+                rospy.loginfo_throttle(3, "Red cylinder nearby, waiting...")
+                self._phase_start = rospy.Time.now()  # reset timer
+            elif elapsed > 2.0:
+                # Cylinder has been gone for 2 seconds, go!
+                rospy.loginfo("Red cylinder clear! Entering target room!")
+                self.phase = 4
+                if self.robot.number_pose is not None:
+                    self.robot.pub_goal.publish(self.robot.number_pose)
+                    self.robot.goal_reached = False
+
+        elif self.phase == 4:
+            # Entering room
             if self.robot.number_pose is not None:
-                if is_goal_reached(self.robot.number_pose, self.robot.robot_odom, 0.3) or self._get_goal_reached():
+                if is_goal_reached(self.robot.number_pose, self.robot.robot_odom, 0.5) or self._get_goal_reached():
                     rospy.loginfo(f"=== TASK COMPLETE: Stopped at box {self.robot.target_box_number} ===")
-                    self.phase = 1
                     self.robot.pub_percep_cmd.publish("idle")
                     self.robot.percept_wait = ""
-                    self.robot.pub_explore.publish(False)
                     self.robot.set_state(self.robot.idle_state, None)
                     return
                 self.robot.pub_goal.publish(self.robot.number_pose)
                 self.robot.number_pose = None
-        elif self.phase == 1:
-            pass
+
+    def _go_to_next_room_view(self):
+        wp = self.ROOM_WAIT_POINTS[self._scan_idx]
+        goal = self.robot.get_goal_pose_from_config_map(wp)
+        if goal is not None:
+            self.robot.pub_goal.publish(goal)
+            self.robot.goal_reached = False
+            rospy.loginfo(f"Scanning room from {wp}")
+
+    def _go_to_target_wait_point(self):
+        # Use the number_pose to find closest room wait point
+        if self.robot.number_pose is not None:
+            target_y = self.robot.number_pose.pose.position.y
+            # Find closest wait point by y coordinate
+            best_wp = self.ROOM_WAIT_POINTS[0]
+            best_dist = float('inf')
+            for wp in self.ROOM_WAIT_POINTS:
+                goal = self.robot.get_goal_pose_from_config_map(wp)
+                if goal is not None:
+                    d = abs(goal.pose.position.y - target_y)
+                    if d < best_dist:
+                        best_dist = d
+                        best_wp = wp
+            goal = self.robot.get_goal_pose_from_config_map(best_wp)
+            if goal is not None:
+                self.robot.pub_goal.publish(goal)
+                self.robot.goal_reached = False
+                rospy.loginfo(f"Going to wait point {best_wp}")
 
     def terminate(self):
         rospy.loginfo("FindTargetBoxState Terminated")
         self.robot.percept_wait = ""
-        self.robot.pub_explore.publish(False)
 
 
 # Keep legacy states for backward compatibility with manual RVIZ usage

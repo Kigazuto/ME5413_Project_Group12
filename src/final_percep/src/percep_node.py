@@ -148,6 +148,7 @@ class PercepNode:
         self.confirmed_boxes: List[Dict] = []
         self.recent_observations: List[Dict] = []
         self.last_counts_str = None
+        self.fallback_observations = {}  # {label: [(odom_x, odom_y), ...]}
 
         # number mode state
         self.numberposelists = np.zeros((10, 2), dtype=np.float32)
@@ -724,6 +725,36 @@ class PercepNode:
             if now - cluster["last_seen"] <= self.candidate_stale_sec
         ]
 
+    def _fallback_count(self, result):
+        """Fallback counting when lidar-based localization fails.
+        Uses robot odom position for dedup instead of map-projected box position."""
+        if self.curr_odom is None:
+            return
+        ox = self.curr_odom.pose.pose.position.x
+        oy = self.curr_odom.pose.pose.position.y
+        for detection in result:
+            text = str(detection[1])
+            conf = float(detection[2])
+            if len(text) != 1 or not text.isdigit():
+                continue
+            if conf < 0.5:
+                continue
+            diag_vec = np.array(detection[0][2]) - np.array(detection[0][0])
+            diag_len = np.linalg.norm(diag_vec)
+            if diag_len < 15:
+                continue
+            if text not in self.fallback_observations:
+                self.fallback_observations[text] = []
+            # Dedup by odom position (same digit seen within 1.5m = same box)
+            is_new = True
+            for pos in self.fallback_observations[text]:
+                if np.sqrt((pos[0] - ox)**2 + (pos[1] - oy)**2) < 1.5:
+                    is_new = False
+                    break
+            if is_new:
+                self.fallback_observations[text].append([ox, oy])
+                rospy.loginfo(f"[fallback] box '{text}' conf={conf:.2f} at odom=({ox:.1f},{oy:.1f})")
+
     def _prune_recent_observations(self):
         now = rospy.Time.now().to_sec()
         self.recent_observations = [
@@ -822,6 +853,10 @@ class PercepNode:
             })
             self._update_candidate(obs)
 
+        # Fallback: if OCR found digits but localization failed, count by odom dedup
+        if raw_hits > 0 and len(localized) == 0:
+            self._fallback_count(result)
+
         self._promote_candidates()
         self._prune_candidates()
         self._prune_recent_observations()
@@ -857,9 +892,10 @@ class PercepNode:
             return
 
         hsv_image = cv2.cvtColor(self.img_curr, cv2.COLOR_BGR2HSV)
-        lower_red = np.array([0, 100, 100])
-        upper_red = np.array([10, 255, 255])
-        mask = cv2.inRange(hsv_image, lower_red, upper_red)
+        # Detect red (H: 0-10, 170-180) and orange (H: 10-25)
+        mask_red1 = cv2.inRange(hsv_image, np.array([0, 80, 80]), np.array([25, 255, 255]))
+        mask_red2 = cv2.inRange(hsv_image, np.array([170, 80, 80]), np.array([180, 255, 255]))
+        mask = mask_red1 | mask_red2
 
         if np.any(mask != 0):
             self.red_pub.publish("true")
@@ -1120,6 +1156,14 @@ class PercepNode:
             if label is None:
                 continue
             counts[label] = counts.get(label, 0) + 1
+
+        # Merge fallback counts: use max of confirmed vs fallback per label
+        for label, positions in self.fallback_observations.items():
+            fb_count = len(positions)
+            if label not in counts:
+                counts[label] = fb_count
+            else:
+                counts[label] = max(counts[label], fb_count)
 
         count_str = ",".join("%s:%d" % (k, v) for k, v in sorted(counts.items()))
         if count_str != self.last_counts_str:

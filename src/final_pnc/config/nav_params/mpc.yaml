@@ -14,7 +14,7 @@ MPCLocalPlanner:
 
   freq: 50 # control frequency
   rot_th: 15 # degree. rotate in place if the yaw error is less than
-  xy_tol: 0.15 # (m) circular region a und the goal
+  xy_tol: 1.5 # (m) circular region around the goal
   ang_tol: 10 # (degree) angle tolerance
   local_window_size: 3 # (m)
 

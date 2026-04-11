@@ -24,6 +24,7 @@ from dynamic_reconfigure.server import Server as DynServer
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped, Twist
 from nav_msgs.msg import Odometry, Path
 from nav_msgs.srv import GetPlan
+from sensor_msgs.msg import LaserScan
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
@@ -180,6 +181,8 @@ class NMPCNode:
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.robot_odom_callback)
         # self.ref_path_sub = rospy.Subscriber(self.ref_path_topic, Path, self.ref_path_callback)
         self.goal_pose_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_pose_callback)
+        self.scan_sub = rospy.Subscriber("/front/scan", LaserScan, self.scan_callback)
+        self.front_min_dist = float('inf')
         self.reach_pub = rospy.Publisher("/final_pnc/reach_goal", ReachGoal, queue_size=1)
         self.status_pub = rospy.Publisher("/final_pnc/status", Int8, queue_size=1)
         self.set_vel_sub = rospy.Subscriber("/final_pnc/set_ref_vel", Twist, self.set_vel_callback)
@@ -198,6 +201,16 @@ class NMPCNode:
 
         rospy.loginfo("Path tracker node initialized")
 
+    def scan_callback(self, msg: LaserScan):
+        """Check minimum distance in front of the robot (center 60 degrees).
+        Ignore very close readings (< 0.3m) which are likely ground/ramp surface."""
+        n = len(msg.ranges)
+        center = n // 2
+        spread = n // 6  # ~60 degrees
+        front_ranges = msg.ranges[center - spread : center + spread]
+        valid = [r for r in front_ranges if r > 0.3 and r < msg.range_max]
+        self.front_min_dist = min(valid) if valid else float('inf')
+
     def set_vel_callback(self, msg: Twist):
         self.vel_ref = msg.linear.x
         self.max_vel = msg.linear.x
@@ -212,6 +225,7 @@ class NMPCNode:
 
     def goal_pose_callback(self, msg: PoseStamped):
         if self.curr_odom is None:
+            rospy.logwarn("Goal received but odom not ready, ignoring")
             return
         self.goal_pose = msg
         self.goal_pose_ar = pose2ndarray_se2(msg.pose)
@@ -219,21 +233,38 @@ class NMPCNode:
         curr_pose.header = self.curr_odom.header
         curr_pose.header.frame_id = "map"
         curr_pose.pose = self.curr_odom.pose.pose
-        st = time.time()
-        try:
-            self.global_path = self.get_plan_srv.call(curr_pose, msg, self.make_plan_tolerance).plan
-        except rospy.ServiceException as e:
-            rospy.logerr("Service call failed: %s", e)
-            self.pub_error()
+
+        goal_xy = (msg.pose.position.x, msg.pose.position.y)
+        start_xy = (curr_pose.pose.position.x, curr_pose.pose.position.y)
+
+        # Try planning up to 3 times with increasing tolerance
+        planned = False
+        for attempt, tol in enumerate([self.make_plan_tolerance,
+                                        self.make_plan_tolerance * 2,
+                                        self.make_plan_tolerance * 3]):
+            try:
+                result = self.get_plan_srv.call(curr_pose, msg, tol)
+                if result.plan and len(result.plan.poses) > 0:
+                    self.global_path = result.plan
+                    planned = True
+                    break
+                else:
+                    rospy.logwarn(f"Plan attempt {attempt+1}: empty path "
+                                 f"(start={start_xy}, goal={goal_xy}, tol={tol:.1f})")
+            except rospy.ServiceException as e:
+                rospy.logerr(f"Plan attempt {attempt+1}: service failed: {e} "
+                             f"(start={start_xy}, goal={goal_xy})")
+
+        if not planned:
+            rospy.logerr(f"Global planning FAILED after 3 attempts: "
+                         f"start=({start_xy[0]:.1f},{start_xy[1]:.1f}) "
+                         f"goal=({goal_xy[0]:.1f},{goal_xy[1]:.1f})")
+            # Don't call pub_error() — keep current state instead of dropping to IDLE
             return
-        if len(self.global_path.poses) == 0 or self.global_path is None:
-            rospy.logerr("Global path planning failed!")
-            self.pub_error()
-            return
-        duration = time.time() - st
-        self.global_path_plan_time_pub.publish(duration)
+
         self.global_path = path_lin_interpo(self.global_path, 0.2)
-        rospy.loginfo(f"New goal {(msg.pose.position.x,msg.pose.position.y,quat2yaw(msg.pose.orientation))} received!")
+        rospy.loginfo(f"New goal ({goal_xy[0]:.1f},{goal_xy[1]:.1f}) planned from "
+                      f"({start_xy[0]:.1f},{start_xy[1]:.1f})")
         self.fsm_state = FSMState.ROTATE_TO_START
 
     def ref_path_callback(self, msg: Path):
@@ -311,7 +342,11 @@ class NMPCNode:
             return
 
         mpc_ref_path = path2ndarray_se2(self.interpo_ref_path)
-        u = self.controller.solve(self.curr_pose, mpc_ref_path, [[self.vel_ref, 0]] * self.N)
+        try:
+            u = self.controller.solve(self.curr_pose, mpc_ref_path, [[self.vel_ref, 0]] * self.N)
+        except Exception as e:
+            rospy.logwarn_throttle(2, f"MPC solver failed: {e}, sending zero cmd")
+            return Twist()  # return zero velocity instead of crashing
         x_pred = self.controller.x_opti
         pose_array = PoseArray()
         pose_array.header.frame_id = self.map_frame
@@ -418,8 +453,12 @@ class NMPCNode:
             if self.curr_odom is None:
                 continue
 
+            # Publish true current status
             status = Int8()
-            status.data = NavStatus.EXECUTING
+            if self.fsm_state == FSMState.IDLE:
+                status.data = NavStatus.IDLE
+            else:
+                status.data = NavStatus.EXECUTING
             self.status_pub.publish(status)
 
             if self.fsm_state == FSMState.ROTATE_TO_START or self.fsm_state == FSMState.MPC_TRACKING:
@@ -499,12 +538,10 @@ class NMPCNode:
                     self.vel_ref = self.max_vel
                 if self.is_mpc_xy_reached():
                     rospy.loginfo("MPC XY reached!")
-                    # cmd_vel = Twist()
-                    # for i in range(3):
-                    #     self.pub_cmd_vel.publish(cmd_vel)  # stop immediately
-                    #     rate.sleep()
-                    # self.fsm_state = FSMState.MOVE_TO_GOAL_PID
                     self.fsm_state = FSMState.ROTATE_TO_GOAL
+                    cmd_vel = Twist()
+                    self.pub_cmd_vel.publish(cmd_vel)
+                    continue
                 if self.method == "mpc":
                     cmd_vel = self.compute_cmd_vel_mpc()
                 elif self.method == "lqr":
@@ -514,12 +551,15 @@ class NMPCNode:
                 rospy.loginfo_throttle(2, "IDLE")
                 cmd_vel.linear.x = 0
                 cmd_vel.angular.z = 0
-                status = Int8()
-                status.data = NavStatus.IDLE
-                self.status_pub.publish(status)
+
+            if cmd_vel is None:
+                cmd_vel = Twist()
 
             self.pub_cmd_vel.publish(cmd_vel)
-            rate.sleep()
+            try:
+                rate.sleep()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
@@ -528,3 +568,8 @@ if __name__ == "__main__":
         path_tracker_node.run()
     except rospy.ROSInterruptException:
         pass
+    except Exception as e:
+        import traceback
+        rospy.logerr(f"MPC FATAL: {e}")
+        rospy.logerr(traceback.format_exc())
+        raise

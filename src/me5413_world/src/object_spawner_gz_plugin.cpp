@@ -245,7 +245,7 @@ bool ObjectSpawner::spawnRandomBoxes()
       for (const auto& pre_point : this->box_points)
       {
         const double dist = (point - pre_point).Length();
-        if (dist <= 1.5)
+        if (dist <= 3.0)
         {
           has_collision = true;
           break;
@@ -357,20 +357,7 @@ bool ObjectSpawner::spawnRandomCone()
   random_cone_msg.set_sdf_filename("model://construction_cone");
   this->random_cone_name = "Construction Cone";
 
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::bernoulli_distribution d(0.5);
-  bool is_top = d(gen);
-  int random_cone_y;
-
-  if (is_top == true)
-  {
-    random_cone_y = 5.0;
-  }
-  else
-  {
-    random_cone_y = -5.0;
-  }
+  int random_cone_y = -5;  // fixed at door 2
 
   msgs::Set(random_cone_msg.mutable_pose(), ignition::math::Pose3d(
     ignition::math::Vector3d(12, random_cone_y, DEST_Z_COORD),

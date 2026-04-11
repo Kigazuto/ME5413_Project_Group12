@@ -53,37 +53,38 @@ me5413_world:
   # ===== Task 2: Full Autonomous Navigation Waypoints =====
 
   # Lower floor exploration waypoints (for counting boxes)
+  # Diagonal path: left room corners then right area corners
   lower_explore_1:
-    x: -5.0
-    y: 0.0
-    yaw: 3.14
+    x: -18.0
+    y: -7.0
+    yaw: 0.0
   lower_explore_2:
-    x: -10.0
-    y: 5.0
+    x: -2.0
+    y: 7.0
     yaw: 3.14
   lower_explore_3:
-    x: -16.0
-    y: 5.0
-    yaw: 3.14
-  lower_explore_4:
-    x: -16.0
-    y: -5.0
+    x: -18.0
+    y: 7.0
     yaw: 0.0
+  lower_explore_4:
+    x: -2.0
+    y: -7.0
+    yaw: 3.14
   lower_explore_5:
-    x: -10.0
-    y: -5.0
+    x: 0.0
+    y: -7.0
     yaw: 0.0
   lower_explore_6:
-    x: -5.0
-    y: -5.0
-    yaw: 0.0
-  lower_explore_7:
-    x: -5.0
-    y: 5.0
+    x: -7.0
+    y: 7.0
     yaw: 3.14
+  lower_explore_7:
+    x: 0.0
+    y: 7.0
+    yaw: 0.0
   lower_explore_8:
-    x: -16.0
-    y: 0.0
+    x: -7.0
+    y: -7.0
     yaw: 3.14
 
   # Navigate to exit area (before unblock)
@@ -94,8 +95,8 @@ me5413_world:
 
   # Exit from lower floor (after unblock, go through the barrel gap)
   exit_point:
-    x: -15.0
-    y: -11.0
+    x: -13.0
+    y: -12.0
     yaw: -1.57
 
   # Ramp bottom
@@ -127,8 +128,22 @@ me5413_world:
     y: -1.0
     yaw: 1.57
 
-  # Door entry options (one will be blocked by cone)
-  # Cone is at (12, +5) or (12, -5) in world frame
+  # Main room entry options (x=12 wall, one blocked by cone)
+  # Cone fixed at (12, -5). Check from right side then choose.
+  room_entry_check:
+    x: 13.0
+    y: -5.0
+    yaw: 3.14
+  room_entry_clear:
+    x: 12.0
+    y: 5.0
+    yaw: 3.14
+  room_entry_blocked:
+    x: 12.0
+    y: -5.0
+    yaw: 3.14
+
+  # Room (compartment) entries at x=5 wall
   task2_entry_1:
     x: 5.0
     y: 3.0
@@ -143,3 +158,28 @@ me5413_world:
     x: 10.0
     y: 0.0
     yaw: 0.0
+
+  # Safe observation point (right of red cylinder x=6, facing room wall at x=5)
+  safe_observe:
+    x: 9.0
+    y: 3.0
+    yaw: 3.14
+
+  # Room wait points (x=9, facing left toward room entrances at x=5)
+  # Rooms at approx y=3, 0, -3, -6
+  room_wait_1:
+    x: 9.0
+    y: 10.0
+    yaw: 3.14
+  room_wait_2:
+    x: 9.0
+    y: 1.0
+    yaw: 3.14
+  room_wait_3:
+    x: 9.0
+    y: -3.0
+    yaw: 3.14
+  room_wait_4:
+    x: 9.0
+    y: -9.0
+    yaw: 3.14

@@ -193,31 +193,24 @@ class Robot:
     def respawn_status_callback(self, data):
         self.respawn_status = data.data
 
-    def _ensure_world_to_map_transform(self):
-        """Cache the world->map transform once at startup (robot at world origin)."""
-        if hasattr(self, '_cached_world_to_map'):
-            return self._cached_world_to_map
-        try:
-            t = self.tf2_buffer.lookup_transform(
-                self.map_frame, self.world_frame, rospy.Time(0), rospy.Duration(2.0))
-            self._cached_world_to_map = t
-            rospy.loginfo(f"Cached world->map transform: "
-                          f"({t.transform.translation.x:.2f}, {t.transform.translation.y:.2f})")
-            return t
-        except Exception as ex:
-            rospy.logwarn_throttle(2, f"TF map<-world not ready: {ex}")
-            return None
-
     def get_goal_pose_from_config_map(self, name):
+        """Convert world-frame waypoint to map-frame goal using live TF."""
         P_world_goal = self.get_goal_pose_from_config(name)
         if P_world_goal is None:
             return None
 
-        transform = self._ensure_world_to_map_transform()
-        if transform is None:
+        # Always use fresh TF lookup (not cached) to avoid drift
+        try:
+            transform = self.tf2_buffer.lookup_transform(
+                self.map_frame, self.world_frame, rospy.Time(0), rospy.Duration(1.0))
+        except Exception as ex:
+            rospy.logwarn_throttle(2, f"TF map<-world failed: {ex}")
             return None
 
         P_map_goal = tf2_geometry_msgs.do_transform_pose(P_world_goal, transform)
+        rospy.loginfo_throttle(5, f"Waypoint {name}: world({P_world_goal.pose.position.x:.1f},"
+                               f"{P_world_goal.pose.position.y:.1f}) -> "
+                               f"map({P_map_goal.pose.position.x:.1f},{P_map_goal.pose.position.y:.1f})")
         return P_map_goal
 
     def get_goal_pose_from_config(self, name):
@@ -289,7 +282,7 @@ if __name__ == "__main__":
         elif isinstance(robot.current_state, FindTargetBoxState):
             ref_vel.linear.x = 1.0
         elif isinstance(robot.current_state, LowerFloorExploreState):
-            ref_vel.linear.x = 1.2
+            ref_vel.linear.x = 1.2  # explore speed
         elif isinstance(robot.current_state, UnblockExitState):
             ref_vel.linear.x = 1.5  # need to rush through exit
         elif isinstance(robot.current_state, NavigateUpperState):

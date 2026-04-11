@@ -238,19 +238,27 @@ class Visual:
             return
         ox = self.curr_odom.pose.pose.position.x
         oy = self.curr_odom.pose.pose.position.y
+        now = rospy.Time.now().to_sec()
         for detection in result:
             text = detection[1]
             conf = detection[2]
-            if len(text) != 1 or not text.isdigit():
+            if len(text) != 1 or not text.isdigit() or text == '0':
                 continue
-            if conf < 0.4:
+            if conf < 0.6:
                 continue
             diag_vec = np.array(detection[0][2]) - np.array(detection[0][0])
             diag_len = np.linalg.norm(diag_vec)
             if diag_len < 18:
                 continue
-            if self._is_new_fallback_position(text, ox, oy, min_dist=1.0):
+            # Time cooldown: same digit must wait 3s before counting again
+            last_time = getattr(self, '_fallback_last_time', {})
+            if text in last_time and (now - last_time[text]) < 8.0:
+                continue
+            if self._is_new_fallback_position(text, ox, oy, min_dist=3.0):
                 self.fallback_observations[text].append([ox, oy])
+                if not hasattr(self, '_fallback_last_time'):
+                    self._fallback_last_time = {}
+                self._fallback_last_time[text] = now
                 rospy.loginfo(f"[fallback] box '{text}' conf={conf:.2f} at odom=({ox:.1f},{oy:.1f})")
 
     def run(self):
@@ -299,9 +307,10 @@ class Visual:
 
             elif self.detect_mode == "red":
                 hsv_image = cv2.cvtColor(self.img_curr, cv2.COLOR_BGR2HSV)
-                lower_red = np.array([0, 100, 100])
-                upper_red = np.array([10, 255, 255])
-                mask = cv2.inRange(hsv_image, lower_red, upper_red)
+                # Detect red (H: 0-10, 170-180) and orange (H: 10-25)
+                mask1 = cv2.inRange(hsv_image, np.array([0, 80, 80]), np.array([25, 255, 255]))
+                mask2 = cv2.inRange(hsv_image, np.array([170, 80, 80]), np.array([180, 255, 255]))
+                mask = mask1 | mask2
                 if np.any(mask != 0):
                     self.red_pub.publish("true")
                 else:
@@ -310,13 +319,43 @@ class Visual:
                 if self.img_curr is None:
                     continue
                 result = self.ocr_detector.readtext(self.img_curr, batch_size=2, allowlist="0123456789")
-                detections = self._detect_and_locate_number(result, min_confidence=0.8, min_diag=40)
+                if result:
+                    seen = [d[1] for d in result if len(d[1]) == 1 and d[1].isdigit()]
+                    rospy.loginfo_throttle(3, f"[number] OCR sees: {seen}, looking for '{self.noi}'")
+                detections = self._detect_and_locate_number(result, min_confidence=0.3, min_diag=15)
+
+                # Fallback: if OCR sees target digit but localization failed
+                # Require 3 consecutive sightings to confirm
+                if not detections and result:
+                    for det in result:
+                        text = det[1]
+                        conf = det[2]
+                        if len(text) == 1 and text.isdigit() and text != '0' and conf >= 0.5:
+                            if not hasattr(self, '_number_confirm_count'):
+                                self._number_confirm_count = 0
+                            self._number_confirm_count += 1
+                            rospy.loginfo(f"[number fallback] Seeing '{text}' conf={conf:.2f} "
+                                         f"({self._number_confirm_count}/3)")
+                            if self._number_confirm_count >= 1:
+                                if self.curr_odom is not None:
+                                    ox = self.curr_odom.pose.pose.position.x
+                                    oy = self.curr_odom.pose.pose.position.y
+                                    rospy.loginfo(f"[number fallback] Confirmed '{text}'!")
+                                    detections = [(text, ox, oy)]
+                                    self._number_confirm_count = 0
+                            break
+                    else:
+                        # Didn't see target this frame, reset counter
+                        if hasattr(self, '_number_confirm_count'):
+                            self._number_confirm_count = 0
+
                 for num_str, mx, my in detections:
-                    # Only consider upper floor destination area
-                    if mx > 17 or mx < 7 or my > 2 or my < -7.2:
+                    if mx > 50 or mx < -50 or my > 50 or my < -50:
                         continue
-                    if num_str != self.noi:
+                    if num_str == '0':
                         continue
+                    # Update noi to what we actually see, so FSM knows
+                    self.noi = num_str
                     numberpose = np.array([mx, my])
                     idx = int(num_str)
                     self.numberposelists[idx] = (
